@@ -49,7 +49,7 @@ def load_data(filepath):
 
 def create_dataloader(sequences, tokenizer, batch_size):
     dataset = SequenceDataset(sequences, tokenizer)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=True)
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 def load_model_and_tokenizer(model_dir, device):
     model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True)

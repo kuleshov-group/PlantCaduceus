@@ -1,5 +1,4 @@
-# PlantCaduceus
-Cross-species plant genomes modeling at single nucleotide resolution using a pre-trained dna language model
+# [PlantCaduceus: Cross-species Modeling of Plant Genomes at Single Nucleotide Resolution](https://plantcaduceus.github.io/)
 
 ## Using PlantCaduceus with Hugging Face
 
@@ -13,29 +12,37 @@ Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The availab
 - PlantCaduceus_l32: [kuleshov-group/PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)
     - Trained on sequences of length 512bp, with a model size of 256 and 32 layers.
 
-To use PlantCaduceus with Hugging Face, you can use the following code snippet:
+## How to use PlantCaduceus to get embeddings and logits score
+The example notebook to use PlantCaduceus to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
 
-```python
-from transformers import AutoModel, AutoModelForMaskedLM, AutoTokenizer
-import torch
-model_path = 'kuleshov-group/PlantCaduceus_l32'
-device = "cuda:0" if torch.cuda.is_available() else "cpu"
-model = AutoModelForMaskedLM.from_pretrained(model_path, trust_remote_code=True).to(device)
-model.eval()
-tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+## Fine-tune PlantCaduceus
+We fine-tuned the PlantCaduceus by training an XGBoost model on top of the embedding for each task. The fine-tuning script is available in the `src` directory. The script takes the following arguments:
 
-sequence = "ATGCGTACGATCGTAG"
-encoding = tokenizer.encode_plus(
-            sequence,
-            return_tensors="pt",
-            return_attention_mask=False,
-            return_token_type_ids=False
-        )
-input_ids = encoding["input_ids"].to(device)
-with torch.inference_mode():
-    outputs = model(input_ids=input_ids, output_hidden_states=True)
+```
+python src/fine_tune.py \
+    -train train.tsv \ # training data, data format: https://huggingface.co/datasets/kuleshov-group/cross-species-single-nucleotide-annotation/tree/main/TIS
+    -valid valid.tsv \ # validation data, the same format as the training data
+    -test test.tsv \ # test data (optional), the same format as the training data
+    -model 'kuleshov-group/PlantCaduceus_l20' \ # pre-trained model name
+    -output ./output \ # output directory
+    -device 'cuda:1' # GPU device to dump embeddings
 ```
 
+## Zero-shot score to estimate mutation effect
+We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. The script takes the following arguments:
+```
+python src/zero_shot_score.py \
+    -input examples/example_snp.tsv \ 
+    -output output.tsv \
+    -model 'kuleshov-group/PlantCaduceus_l20' \ # pre-trained model name
+    -device 'cuda:1' # GPU device to dump embeddings
+```
+
+The data structure of `example_snp.tsv` is as follows:
+```
+chr	start	end	pos	ref	alt	sequences
+chr1	315858	316370	316114	C	T	CTCTCCCGATGTCCTCTCGTCGTCTTATCCAGATTCCGGAGCCGATCGAACGCAGGGGAGATACACTCCAGTGGGCATGAAGTGGTTCCAAACCCCAATACCGAAGCGTTGAGTCGATTCGCTCGCTGCTGAAGTGGTTCCTTGCATGGCCGGAGCCAGTGCGTCCTGCTCCATGGCCGCCGGAGCCTGCTGCGCCTGCCCATCGTCACTTTTCCCCCACCGCCGTCCTCGGCGCCACTCCCGCACCATCATGTGCAGCTCCCTTCCGTCCTTATCCCTGCCATTCCCAATCCCAGCGCCTACCAGCGGCGGCGGACGCCTGCGCATCTTCTCCGGCAGCGCCAACCCGGTGCTGGCGCAGGAGATCGCGTGCTACCTTGGGATGGAGCTGGGCCAGATCAAGATCAAGCGGTTCGCGGATGGCGAGATCTACGTGCAGCTGCAAGAGAGCGTGCGTGGCTGCGACGTGTTCCTGGTGCAGCCCACCTGCCCTCCCGCCAACGAGAACCTCA
+```
 
 ## Citation
 ```bibtex
