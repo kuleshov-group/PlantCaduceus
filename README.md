@@ -2,6 +2,8 @@
 
 ## Using PlantCaduceus with Hugging Face
 
+The example notebook to use PlantCaduceus to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
+
 Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The available models are:
 - PlantCaduceus_l20: [kuleshov-group/PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20)
     - Trained on sequences of length 512bp, with a model size of 256 and 20 layers.
@@ -12,8 +14,6 @@ Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The availab
 - PlantCaduceus_l32: [kuleshov-group/PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)
     - Trained on sequences of length 512bp, with a model size of 256 and 32 layers.
 
-## How to use PlantCaduceus to get embeddings and logits score
-The example notebook to use PlantCaduceus to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
 
 ## Fine-tune PlantCaduceus
 We fine-tuned the PlantCaduceus by training an XGBoost model on top of the embedding for each task. The fine-tuning script is available in the `src` directory. The script takes the following arguments:
