@@ -1,0 +1,28 @@
+accelerate
+Bio
+datasets
+numpy
+pandas
+tqdm
+transformers
+wandb
+
+# for mosaicBERT remove once refactored
+einops
+flash_attn>=2.4.2
+opt_einsum
+omegaconf
+# required install for speed
+triton-pre-mlir@git+https://github.com/vchiley/triton.git@triton_pre_mlir_sm90#subdirectory=python
+
+# for mosaic trainer
+composer
+mosaicml_streaming # remove
+
+# ssm-mamba
+lightning
+
+# for mamba experiments
+# casual-conv1d<=1.0.2
+mamba-ssm==1.1.4
+#git+https://github.com/state-spaces/mamba

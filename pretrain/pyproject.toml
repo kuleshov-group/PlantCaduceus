@@ -1,0 +1,16 @@
+[tool.ruff]
+
+select = [
+    "C4",
+    "E",
+    "F",
+    "PERF",
+    "RUF015",
+]
+
+ignore = [
+    "C408",
+    "E501",
+    "PERF2",
+    "PERF4",
+]
