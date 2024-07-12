@@ -1,5 +1,12 @@
 # [PlantCaduceus: Cross-species Modeling of Plant Genomes at Single Nucleotide Resolution](https://plantcaduceus.github.io/)
 
+## Requirements
+```
+pytorch >= 2.0
+transformers >= 4.0
+pip install mamba-ssm<=2.0.0
+```
+
 ## Using PlantCaduceus with Hugging Face
 
 The example notebook to use PlantCaduceus to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
