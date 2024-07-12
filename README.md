@@ -4,7 +4,7 @@
 ```
 pytorch >= 2.0
 transformers >= 4.0
-pip install mamba-ssm<=2.0.0
+mamba-ssm<=2.0.0
 ```
 
 ## Using PlantCaduceus with Hugging Face
