@@ -119,9 +119,10 @@ def main():
 
     train_embeddings = extract_embeddings(model, train_loader, args.device, args.tokenIdx)
     valid_embeddings = extract_embeddings(model, valid_loader, args.device, args.tokenIdx)
+    np.savez_compressed(os.path.join(args.output, 'train_valid_embeddings.npz'), train=train_embeddings, valid=valid_embeddings)
 
     xgb_model = train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels)
-    np.save(os.path.join(args.output, 'model.json'), xgb_model)
+    xgb_model.save_model(os.path.join(args.output, 'model.json'))
     fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, valid_embeddings, valid_labels)
     plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix='valid')
 
@@ -129,6 +130,7 @@ def main():
         test_sequences, test_labels = load_data(args.test)
         test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
         test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+        np.savez_compressed(os.path.join(args.output, 'test_embeddings.npz'), test=test_embeddings)
         fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, test_embeddings, test_labels)
         plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix='test')
 
