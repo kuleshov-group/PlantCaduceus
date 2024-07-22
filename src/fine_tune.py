@@ -74,7 +74,7 @@ def extract_embeddings(model, dataloader, device, tokenIdx):
             input_ids = batch['input_ids'].to(device)
             with torch.inference_mode():
                 outputs = model(input_ids=input_ids, output_hidden_states=True)
-            token_embedding = outputs.hidden_states[-1][:, tokenIdx, :].cpu().numpy()
+            token_embedding = outputs.hidden_states[-1][:, tokenIdx, :].to(torch.float32).cpu().numpy()
             embeddings.append(token_embedding)
     embeddings = np.concatenate(embeddings, axis=0)
     # average forward and reverse embeddings
