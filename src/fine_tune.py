@@ -131,7 +131,8 @@ def main():
             test_sequences, test_labels = load_data(args.test)
             test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
             test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-            np.savez_compressed(os.path.join(args.output, 'test_embeddings.npz'), test=test_embeddings)
+            prefix = os.path.basename(args.test).split('.')[0]
+            np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
             
             xgb_model = xgb.XGBClassifier()
             xgb_model.load_model(os.path.join(args.output, 'model.json'))
@@ -160,7 +161,8 @@ def main():
             test_sequences, test_labels = load_data(args.test)
             test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
             test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-            np.savez_compressed(os.path.join(args.output, 'test_embeddings.npz'), test=test_embeddings)
+            prefix = os.path.basename(args.test).split('.')[0]
+            np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
             fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, test_embeddings, test_labels)
             prefix = os.path.basename(args.test).split('.')[0]
             plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
