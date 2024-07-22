@@ -59,7 +59,7 @@ def extract_logits(model, dataloader, device, tokenIdx, tokenizer):
     logging.info("Extracting logits")
     nucleotides = list('acgt')
     results = []
-    for batch in tqdm(dataloader, desc="Inference..."):
+    for batch in tqdm(dataloader):
         curIDs = batch['input_ids'].to(device)
         curIDs = curIDs.squeeze(1)
         with torch.inference_mode():
@@ -92,6 +92,9 @@ def main():
     
     logging.info(f"Reading input data from {args.inputDF}")
     snpDF = pd.read_csv(args.inputDF, delimiter='\t')
+    logging.info("Filtering out invalid SNPs")
+    logging.info(f"Filtered out {len(snpDF) - len(snpDF[snpDF['ref'].isin(['A', 'C', 'G', 'T']) & snpDF['alt'].isin(['A', 'C', 'G', 'T'])])} invalid SNPs")
+    snpDF = snpDF[snpDF['ref'].isin(['A', 'C', 'G', 'T']) & snpDF['alt'].isin(['A', 'C', 'G', 'T'])]
     sequences = snpDF['sequences'].tolist()
 
     model, tokenizer = load_model_and_tokenizer(args.model, args.device)
