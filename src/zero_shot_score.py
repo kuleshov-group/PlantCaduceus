@@ -102,10 +102,8 @@ def main():
     logging.info("Creating data loader")
     loader = create_dataloader(sequences, tokenizer, args.batchSize, args.tokenIdx)
 
-    logging.info("Extracting logits")
     logits = extract_logits(model, loader, args.device, args.tokenIdx, tokenizer)
 
-    logging.info("Calculating zero-shot scores")
     scores = zero_shot_score(snpDF, logits)
 
     snpDF['zeroShotScore'] = scores
