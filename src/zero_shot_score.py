@@ -83,7 +83,11 @@ def zero_shot_score(snpDF, logits):
     return res
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     args = parse_args()
     
     logging.info(f"Reading input data from {args.inputDF}")

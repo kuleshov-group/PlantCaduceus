@@ -116,7 +116,11 @@ def plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, output_dir, prefix
     plt.savefig(os.path.join(output_dir, prefix + '_metrics.png'))
 
 def main():
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
     args = parse_args()
     os.makedirs(args.output, exist_ok=True)
 
