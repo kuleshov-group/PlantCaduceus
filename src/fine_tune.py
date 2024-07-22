@@ -56,8 +56,11 @@ def create_dataloader(sequences, tokenizer, batch_size):
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
 
 def load_model_and_tokenizer(model_dir, device):
-    logging.info(f"Loading pre-trained model and tokenizer from {model_dir}")
-    model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True)
+    logging.info(f"Loading model and tokenizer from {model_dir}")
+    try:
+        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, dtype=torch.bfloat16)
+    except:
+        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, dtype=torch.bfloat16)
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
     model.to(device)
     return model, tokenizer
