@@ -133,7 +133,8 @@ def main():
             xgb_model.load_model(os.path.join(args.output, 'model.json'))
             
             fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, test_embeddings, test_labels)
-            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix='test')
+            prefix = os.path.basename(args.test).split('.')[0]
+            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
     else:
         train_sequences, train_labels = load_data(args.train)
         valid_sequences, valid_labels = load_data(args.valid)
@@ -148,7 +149,8 @@ def main():
         xgb_model = train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels)
         xgb_model.save_model(os.path.join(args.output, 'model.json'))
         fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, valid_embeddings, valid_labels)
-        plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix='valid')
+        prefix = os.path.basename(args.valid).split('.')[0]
+        plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
 
         if args.test:
             test_sequences, test_labels = load_data(args.test)
@@ -156,7 +158,8 @@ def main():
             test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
             np.savez_compressed(os.path.join(args.output, 'test_embeddings.npz'), test=test_embeddings)
             fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, test_embeddings, test_labels)
-            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix='test')
+            prefix = os.path.basename(args.test).split('.')[0]
+            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
 
 if __name__ == "__main__":
     main()
