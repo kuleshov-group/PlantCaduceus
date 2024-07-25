@@ -51,6 +51,20 @@ chr	start	end	pos	ref	alt	sequences
 chr1	315858	316370	316114	C	T	CTCTCCCGATGTCCTCTCGTCGTCTTATCCAGATTCCGGAGCCGATCGAACGCAGGGGAGATACACTCCAGTGGGCATGAAGTGGTTCCAAACCCCAATACCGAAGCGTTGAGTCGATTCGCTCGCTGCTGAAGTGGTTCCTTGCATGGCCGGAGCCAGTGCGTCCTGCTCCATGGCCGCCGGAGCCTGCTGCGCCTGCCCATCGTCACTTTTCCCCCACCGCCGTCCTCGGCGCCACTCCCGCACCATCATGTGCAGCTCCCTTCCGTCCTTATCCCTGCCATTCCCAATCCCAGCGCCTACCAGCGGCGGCGGACGCCTGCGCATCTTCTCCGGCAGCGCCAACCCGGTGCTGGCGCAGGAGATCGCGTGCTACCTTGGGATGGAGCTGGGCCAGATCAAGATCAAGCGGTTCGCGGATGGCGAGATCTACGTGCAGCTGCAAGAGAGCGTGCGTGGCTGCGACGTGTTCCTGGTGCAGCCCACCTGCCCTCCCGCCAACGAGAACCTCA
 ```
 
+## Pre-train PlantCaduceus with huggingface
+```
+WANDB_PROJECT=PlantCaduceus python src/HF_pre_train.py --do_train 
+    --report_to wandb --prediction_loss_only True --remove_unused_columns False --dataset_name 'kuleshov-group/Angiosperm_16_genomes' --soft_masked_loss_weight_train 0.1 --soft_masked_loss_weight_evaluation 0.0 \
+    --weight_decay 0.01 --optim adamw_torch \
+    --dataloader_num_workers 16 --preprocessing_num_workers 16 --seed 32 \
+    --save_strategy steps --save_steps 1000 --evaluation_strategy steps --eval_steps 1000 --logging_steps 10 \
+    --max_steps 120000 --warmup_steps 1000 \
+    --save_total_limit 20 --learning_rate 2E-4 --lr_scheduler_type constant_with_warmup \
+    --run_name test --overwrite_output_dir \
+    --output_dir "PlantCaduceus_train_1" --per_device_train_batch_size 32 --per_device_eval_batch_size 32 --gradient_accumulation_steps 4 --tokenizer_name 'kuleshov-group/PlantCaduceus_l20' --config_name 'kuleshov-group/PlantCaduceus_l20'
+```
+
+
 ## Citation
 ```bibtex
 @article {Zhai2024.06.04.596709,
