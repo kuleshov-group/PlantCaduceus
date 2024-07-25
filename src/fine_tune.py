@@ -12,15 +12,17 @@ import logging
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-train", type=str, help="The directory of input fasta")
-    parser.add_argument("-valid", type=str, help="The directory of output")
-    parser.add_argument("-test", type=str, help="The directory of test fasta")
+    parser.add_argument("-train", type=str, help="The directory of training data")
+    parser.add_argument("-valid", type=str, help="The directory of validation data")
+    parser.add_argument("-test", type=str, help="The directory of test data")
     parser.add_argument("-model", type=str, help="The directory of pre-trained model")
     parser.add_argument("-output", type=str, help="The directory of output")
     parser.add_argument("-device", type=str, default="cuda:0", help="The device to run the model")
     parser.add_argument("-batchSize", type=int, default=128, help="The batch size for the model")
     parser.add_argument("-tokenIdx", type=int, default=255, help="The index of the nucleotide")
     parser.add_argument("-test_only", action='store_true', help="Flag to perform only testing")
+    parser.add_argument("-save_memory", action='store_true', help="Flag to save memory, it only works for testing")
+    parser.add_argument("-chunk_size", type=int, default=100000, help="The chunk size for testing, it only works for testing when save_memory is set")
     return parser.parse_args()
 
 class SequenceDataset(Dataset):
@@ -91,9 +93,12 @@ def train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_
     model.fit(train_embeddings, train_labels, eval_set=[(valid_embeddings, valid_labels)])
     return model
 
-def evaluate_model(model, embeddings, labels):
+def infer_xgboost_model(model, embeddings):
+    logging.info("Inferencing XGBoost model")
+    return model.predict_proba(embeddings)[:, 1]
+
+def evaluate_model(predictions, labels):
     logging.info("Evaluating model")
-    predictions = model.predict_proba(embeddings)[:, 1]
     fpr, tpr, _ = metrics.roc_curve(labels, predictions)
     precision, recall, _ = metrics.precision_recall_curve(labels, predictions)
     roc_auc = metrics.auc(fpr, tpr)
@@ -132,17 +137,34 @@ def main():
     if args.test_only:
         if args.test:
             test_sequences, test_labels = load_data(args.test)
-            test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
-            test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-            prefix = os.path.basename(args.test).split('.')[0]
-            np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
-            
             xgb_model = xgb.XGBClassifier()
             xgb_model.load_model(os.path.join(args.output, 'model.json'))
             
-            fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, test_embeddings, test_labels)
+            if args.save_memory: # split the test data into smaller chunks
+                logging.info("Saving memory by splitting the test data into smaller chunks with size {}".format(args.chunk_size))
+                predictions = []
+                for i in range(0, len(test_sequences), args.chunk_size):
+                    test_loader = create_dataloader(test_sequences[i:i+args.chunk_size], tokenizer, args.batchSize)
+                    test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                    prefix = os.path.basename(args.test).split('.')[0]
+                    np.savez_compressed(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'), test=test_embeddings)
+                    pred = infer_xgboost_model(xgb_model, test_embeddings)
+                    pred = pred[:, np.newaxis]
+                    predictions.extend(pred)
+                predictions = np.concatenate(predictions, axis=0)
+                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
+            else:
+                test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
+                test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                prefix = os.path.basename(args.test).split('.')[0]
+                predictions = infer_xgboost_model(xgb_model, test_embeddings)
+                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
+            
+            fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(predictions, test_labels)
             prefix = os.path.basename(args.test).split('.')[0]
             plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
+        else:
+            logging.error("Please provide the test data")
     else:
         train_sequences, train_labels = load_data(args.train)
         valid_sequences, valid_labels = load_data(args.valid)
@@ -156,19 +178,42 @@ def main():
 
         xgb_model = train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels)
         xgb_model.save_model(os.path.join(args.output, 'model.json'))
-        fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, valid_embeddings, valid_labels)
+        valid_predictions = infer_xgboost_model(xgb_model, valid_embeddings)
+        np.savez_compressed(os.path.join(args.output, 'valid_predictions.npz'), predictions=valid_predictions)
+        fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(valid_predictions, valid_labels)
         prefix = os.path.basename(args.valid).split('.')[0]
         plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
 
         if args.test:
             test_sequences, test_labels = load_data(args.test)
-            test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
-            test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-            prefix = os.path.basename(args.test).split('.')[0]
-            np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
-            fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(xgb_model, test_embeddings, test_labels)
+            xgb_model = xgb.XGBClassifier()
+            xgb_model.load_model(os.path.join(args.output, 'model.json'))
+            
+            if args.save_memory: # split the test data into smaller chunks
+                logging.info("Saving memory by splitting the test data into smaller chunks with size {}".format(args.chunk_size))
+                predictions = []
+                for i in range(0, len(test_sequences), args.chunk_size):
+                    test_loader = create_dataloader(test_sequences[i:i+args.chunk_size], tokenizer, args.batchSize)
+                    test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                    prefix = os.path.basename(args.test).split('.')[0]
+                    np.savez_compressed(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'), test=test_embeddings)
+                    pred = infer_xgboost_model(xgb_model, test_embeddings)
+                    predictions.extend(pred)
+                predictions = np.concatenate(predictions, axis=0)
+                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
+            else:
+                test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
+                test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                prefix = os.path.basename(args.test).split('.')[0]
+                np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
+                predictions = infer_xgboost_model(xgb_model, test_embeddings)
+                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
+            
+            fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(predictions, test_labels)
             prefix = os.path.basename(args.test).split('.')[0]
             plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
+        else:
+            logging.error("Please provide the test data")
 
 if __name__ == "__main__":
     main()

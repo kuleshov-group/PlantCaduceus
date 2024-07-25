@@ -29,7 +29,7 @@ We fine-tuned the PlantCaduceus by training an XGBoost model on top of the embed
 python src/fine_tune.py \
     -train train.tsv \ # training data, data format: https://huggingface.co/datasets/kuleshov-group/cross-species-single-nucleotide-annotation/tree/main/TIS
     -valid valid.tsv \ # validation data, the same format as the training data
-    -test test.tsv \ # test data (optional), the same format as the training data
+    -test test_rice.tsv \ # test data (optional), the same format as the training data
     -model 'kuleshov-group/PlantCaduceus_l20' \ # pre-trained model name
     -output ./output \ # output directory
     -device 'cuda:1' # GPU device to dump embeddings
