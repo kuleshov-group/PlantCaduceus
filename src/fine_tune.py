@@ -23,6 +23,7 @@ def parse_args():
     parser.add_argument("-test_only", action='store_true', help="Flag to perform only testing")
     parser.add_argument("-save_memory", action='store_true', help="Flag to save memory, it only works for testing")
     parser.add_argument("-chunk_size", type=int, default=100000, help="The chunk size for testing, it only works for testing when save_memory is set")
+    parser.add_argument("-seed", type=int, default=42, help="The random seed to train XGBoost model")
     return parser.parse_args()
 
 class SequenceDataset(Dataset):
@@ -87,9 +88,9 @@ def extract_embeddings(model, dataloader, device, tokenIdx):
     averaged_embeddings = (forward + reverse) / 2
     return averaged_embeddings
 
-def train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels):
+def train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels, random_state=42):
     logging.info("Training XGBoost model")
-    model = xgb.XGBClassifier(n_estimators=1000, max_depth=6, learning_rate=0.1, n_jobs=64)
+    model = xgb.XGBClassifier(n_estimators=1000, max_depth=6, learning_rate=0.1, random_state=random_state, n_jobs=-1)
     model.fit(train_embeddings, train_labels, eval_set=[(valid_embeddings, valid_labels)])
     return model
 
@@ -105,7 +106,7 @@ def evaluate_model(predictions, labels):
     prauc = metrics.average_precision_score(labels, predictions)
     return fpr, tpr, precision, recall, roc_auc, prauc
 
-def plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, output_dir, prefix='valid'):
+def plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, output_dir, prefix='valid', random_state=42):
     logging.info(f"Plotting metrics and saving to {output_dir}")
     fig, axs = plt.subplots(1, 2, figsize=(12, 6))
     axs[0].plot(fpr, tpr, label=f'AUC = {roc_auc:.2f}', linewidth=2)
@@ -121,7 +122,12 @@ def plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, output_dir, prefix
     axs[1].legend(loc='lower left')
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, prefix + '_metrics.png'))
+    plt.savefig(os.path.join(output_dir, f'seed_{random_state}_{prefix}_metrics.png'))
+    # save metrics to file
+    with open(os.path.join(output_dir, f'seed_{random_state}_{prefix}_metrics.txt'), 'w') as f:
+        f.write(f"ROC AUC: {roc_auc:.2f}\n")
+        f.write(f"PRAUC: {prauc:.2f}\n")
+
 
 def main():
     logging.basicConfig(
@@ -138,31 +144,39 @@ def main():
         if args.test:
             test_sequences, test_labels = load_data(args.test)
             xgb_model = xgb.XGBClassifier()
-            xgb_model.load_model(os.path.join(args.output, 'model.json'))
-            
+            xgb_model.load_model(os.path.join(args.output, f'seed_{args.seed}_XGBoost.json'))
+            prefix = os.path.basename(args.test).split('.')[0]
+
             if args.save_memory: # split the test data into smaller chunks
                 logging.info("Saving memory by splitting the test data into smaller chunks with size {}".format(args.chunk_size))
                 predictions = []
                 for i in range(0, len(test_sequences), args.chunk_size):
-                    test_loader = create_dataloader(test_sequences[i:i+args.chunk_size], tokenizer, args.batchSize)
-                    test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-                    prefix = os.path.basename(args.test).split('.')[0]
-                    np.savez_compressed(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'), test=test_embeddings)
+                    if os.path.exists(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz')):
+                        logging.info(f"Found pre-computed embeddings, loading from file {os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz')}")
+                        embeddings = np.load(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'))
+                        test_embeddings = embeddings['test']
+                    else:
+                        test_loader = create_dataloader(test_sequences[i:i+args.chunk_size], tokenizer, args.batchSize)
+                        test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                        np.savez_compressed(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'), test=test_embeddings)
                     pred = infer_xgboost_model(xgb_model, test_embeddings)
                     pred = pred[:, np.newaxis]
                     predictions.extend(pred)
                 predictions = np.concatenate(predictions, axis=0)
-                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
             else:
-                test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
-                test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-                prefix = os.path.basename(args.test).split('.')[0]
+                if os.path.exists(os.path.join(args.output, f'{prefix}_embeddings.npz')):
+                    logging.info(f"Found pre-computed embeddings, loading from file {os.path.join(args.output, f'{prefix}_embeddings.npz')}")
+                    embeddings = np.load(os.path.join(args.output, f'{prefix}_embeddings.npz'))
+                    test_embeddings = embeddings['test']
+                else:
+                    test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
+                    test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                    np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
                 predictions = infer_xgboost_model(xgb_model, test_embeddings)
-                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
-            
+                    
+            np.savez_compressed(os.path.join(args.output, f'seed_{args.seed}_{prefix}_predictions.npz'), predictions=predictions)
             fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(predictions, test_labels)
-            prefix = os.path.basename(args.test).split('.')[0]
-            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
+            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix, random_state=args.seed)
         else:
             logging.error("Please provide the test data")
     else:
@@ -171,49 +185,66 @@ def main():
 
         train_loader = create_dataloader(train_sequences, tokenizer, args.batchSize)
         valid_loader = create_dataloader(valid_sequences, tokenizer, args.batchSize)
+        if os.path.exists(os.path.join(args.output, 'train_valid_embeddings.npz')):
+            logging.info(f"Found pre-computed embeddings, loading from file {os.path.join(args.output, 'train_valid_embeddings.npz')}")
+            embeddings = np.load(os.path.join(args.output, 'train_valid_embeddings.npz'))
+            train_embeddings = embeddings['train']
+            valid_embeddings = embeddings['valid']
+        else:
+            train_embeddings = extract_embeddings(model, train_loader, args.device, args.tokenIdx)
+            valid_embeddings = extract_embeddings(model, valid_loader, args.device, args.tokenIdx)
+            np.savez_compressed(os.path.join(args.output, 'train_valid_embeddings.npz'), train=train_embeddings, valid=valid_embeddings)
 
-        train_embeddings = extract_embeddings(model, train_loader, args.device, args.tokenIdx)
-        valid_embeddings = extract_embeddings(model, valid_loader, args.device, args.tokenIdx)
-        np.savez_compressed(os.path.join(args.output, 'train_valid_embeddings.npz'), train=train_embeddings, valid=valid_embeddings)
-
-        xgb_model = train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels)
-        xgb_model.save_model(os.path.join(args.output, 'model.json'))
-        valid_predictions = infer_xgboost_model(xgb_model, valid_embeddings)
-        np.savez_compressed(os.path.join(args.output, 'valid_predictions.npz'), predictions=valid_predictions)
-        fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(valid_predictions, valid_labels)
-        prefix = os.path.basename(args.valid).split('.')[0]
-        plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
+        if os.path.exists(os.path.join(args.output, f'seed_{args.seed}_XGBoost.json')):
+            logging.info(f"Found pre-trained XGBoost model, loading from file {os.path.join(args.output, f'seed_{args.seed}_XGBoost.json')}")
+            xgb_model = xgb.XGBClassifier()
+            xgb_model.load_model(os.path.join(args.output, f'seed_{args.seed}_XGBoost.json'))
+        else:
+            xgb_model = train_xgboost_model(train_embeddings, train_labels, valid_embeddings, valid_labels, random_state=args.seed)
+            xgb_model.save_model(os.path.join(args.output, f'seed_{args.seed}_XGBoost.json'))
+            valid_predictions = infer_xgboost_model(xgb_model, valid_embeddings)
+            np.savez_compressed(os.path.join(args.output, f'seed_{args.seed}_valid_predictions.npz'), predictions=valid_predictions)
+            fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(valid_predictions, valid_labels)
+            prefix = os.path.basename(args.valid).split('.')[0]
+            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix, random_state=args.seed)
 
         if args.test:
             test_sequences, test_labels = load_data(args.test)
             xgb_model = xgb.XGBClassifier()
-            xgb_model.load_model(os.path.join(args.output, 'model.json'))
-            
+            xgb_model.load_model(os.path.join(args.output, f'seed_{args.seed}_XGBoost.json'))
+            prefix = os.path.basename(args.test).split('.')[0]
+
             if args.save_memory: # split the test data into smaller chunks
                 logging.info("Saving memory by splitting the test data into smaller chunks with size {}".format(args.chunk_size))
                 predictions = []
                 for i in range(0, len(test_sequences), args.chunk_size):
-                    test_loader = create_dataloader(test_sequences[i:i+args.chunk_size], tokenizer, args.batchSize)
-                    test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-                    prefix = os.path.basename(args.test).split('.')[0]
-                    np.savez_compressed(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'), test=test_embeddings)
+                    if os.path.exists(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz')):
+                        logging.info(f"Found pre-computed embeddings, loading from file {os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz')}")
+                        embeddings = np.load(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'))
+                        test_embeddings = embeddings['test']
+                    else:
+                        test_loader = create_dataloader(test_sequences[i:i+args.chunk_size], tokenizer, args.batchSize)
+                        test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                        np.savez_compressed(os.path.join(args.output, f'{prefix}_chunk_{i}_embeddings.npz'), test=test_embeddings)
                     pred = infer_xgboost_model(xgb_model, test_embeddings)
+                    pred = pred[:, np.newaxis]
                     predictions.extend(pred)
                 predictions = np.concatenate(predictions, axis=0)
-                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
             else:
-                test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
-                test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
-                prefix = os.path.basename(args.test).split('.')[0]
-                np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
+                if os.path.exists(os.path.join(args.output, f'{prefix}_embeddings.npz')):
+                    logging.info(f"Found pre-computed embeddings, loading from file {os.path.join(args.output, f'{prefix}_embeddings.npz')}")
+                    embeddings = np.load(os.path.join(args.output, f'{prefix}_embeddings.npz'))
+                    test_embeddings = embeddings['test']
+                else:
+                    test_loader = create_dataloader(test_sequences, tokenizer, args.batchSize)
+                    test_embeddings = extract_embeddings(model, test_loader, args.device, args.tokenIdx)
+                    np.savez_compressed(os.path.join(args.output, prefix + '_embeddings.npz'), test=test_embeddings)
                 predictions = infer_xgboost_model(xgb_model, test_embeddings)
-                np.savez_compressed(os.path.join(args.output, f'{prefix}_predictions.npz'), predictions=predictions)
-            
+                    
+            np.savez_compressed(os.path.join(args.output, f'seed_{args.seed}_{prefix}_predictions.npz'), predictions=predictions)
             fpr, tpr, precision, recall, roc_auc, prauc = evaluate_model(predictions, test_labels)
             prefix = os.path.basename(args.test).split('.')[0]
-            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix)
-        else:
-            logging.error("Please provide the test data")
+            plot_metrics(fpr, tpr, precision, recall, roc_auc, prauc, args.output, prefix=prefix, random_state=args.seed)
 
 if __name__ == "__main__":
     main()
