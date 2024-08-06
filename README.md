@@ -41,16 +41,104 @@ We used the log-likelihood difference between the reference and the alternative 
 python src/zero_shot_score.py \
     -input examples/example_snp.tsv \ 
     -output output.tsv \
-    -model 'kuleshov-group/PlantCaduceus_l20' \ # pre-trained model name
+    -model 'kuleshov-group/PlantCaduceus_l32' \ # pre-trained model name
     -device 'cuda:1' # GPU device to dump embeddings
 ```
 
-The data structure of `example_snp.tsv` is as follows:
-```
-chr	start	end	pos	ref	alt	sequences
-chr1	315858	316370	316114	C	T	CTCTCCCGATGTCCTCTCGTCGTCTTATCCAGATTCCGGAGCCGATCGAACGCAGGGGAGATACACTCCAGTGGGCATGAAGTGGTTCCAAACCCCAATACCGAAGCGTTGAGTCGATTCGCTCGCTGCTGAAGTGGTTCCTTGCATGGCCGGAGCCAGTGCGTCCTGCTCCATGGCCGCCGGAGCCTGCTGCGCCTGCCCATCGTCACTTTTCCCCCACCGCCGTCCTCGGCGCCACTCCCGCACCATCATGTGCAGCTCCCTTCCGTCCTTATCCCTGCCATTCCCAATCCCAGCGCCTACCAGCGGCGGCGGACGCCTGCGCATCTTCTCCGGCAGCGCCAACCCGGTGCTGGCGCAGGAGATCGCGTGCTACCTTGGGATGGAGCTGGGCCAGATCAAGATCAAGCGGTTCGCGGATGGCGAGATCTACGTGCAGCTGCAAGAGAGCGTGCGTGGCTGCGACGTGTTCCTGGTGCAGCCCACCTGCCCTCCCGCCAACGAGAACCTCA
-```
+### Inference speed test
+The inference speed is highly dependent on the model size and GPU type, we tested on some commonly used GPUs. With 5,000 SNPs, the inference speed is as follows:
 
+<table>
+    <tr>
+        <th>Model</th>
+        <th>GPU</th>
+        <th>Time</th>
+    </tr>
+    <tr>
+        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l20</td>
+        <td>A100</td>
+        <td>19s</td>
+    </tr>
+    <tr>
+        <td>A40</td>
+        <td>26s</td>
+    </tr>
+    <tr>
+        <td>3090</td>
+        <td>25s</td>
+    </tr>
+    <tr>
+        <td>A6000</td>
+        <td>24s</td>
+    </tr>
+    <tr>
+        <td>A5000</td>
+        <td>25s</td>
+    </tr>
+    <tr>
+        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l24</td>
+        <td>A100</td>
+        <td>27s</td>
+    </tr>
+    <tr>
+        <td>A40</td>
+        <td>38s</td>
+    </tr>
+    <tr>
+        <td>3090</td>
+        <td>37s</td>
+    </tr>
+    <tr>
+        <td>A6000</td>
+        <td>35s</td>
+    </tr>
+    <tr>
+        <td>A5000</td>
+        <td>42s</td>
+    </tr>
+    <tr>
+        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l28</td>
+        <td>A100</td>
+        <td>43s</td>
+    </tr>
+    <tr>
+        <td>A40</td>
+        <td>67s</td>
+    </tr>
+    <tr>
+        <td>3090</td>
+        <td>69s</td>
+    </tr>
+    <tr>
+        <td>A6000</td>
+        <td>62s</td>
+    </tr>
+    <tr>
+        <td>A5000</td>
+        <td>77s</td>
+    </tr>
+    <tr>
+        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l32</td>
+        <td>A100</td>
+        <td>66s</td>
+    </tr>
+    <tr>
+        <td>A40</td>
+        <td>107s</td>
+    </tr>
+    <tr>
+        <td>3090</td>
+        <td>116s</td>
+    </tr>
+    <tr>
+        <td>A6000</td>
+        <td>94s</td>
+    </tr>
+    <tr>
+        <td>A5000</td>
+        <td>130s</td>
+    </tr>
+</table>
 ## Pre-train PlantCaduceus with huggingface
 ```
 WANDB_PROJECT=PlantCaduceus python src/HF_pre_train.py --do_train 
