@@ -43,12 +43,38 @@ class SequenceDataset(Dataset):
             'input_ids': input_ids
         }
 
+
 def load_model_and_tokenizer(model_dir, device):
     logging.info(f"Loading model and tokenizer from {model_dir}")
+    
+    # Determine the appropriate dtype based on the GPU capabilities
+    def get_optimal_dtype():
+        if not torch.cuda.is_available():
+            logging.info("Using float32 as no GPU is available.")
+            return torch.float32  
+
+        device_index = torch.cuda.current_device()
+        capability = torch.cuda.get_device_capability(device_index)
+
+        if capability[0] >= 8:  # sm_80 or higher
+            logging.info("Using bfloat16 as the GPU supports sm_80 or higher.")
+            return torch.bfloat16
+        elif capability[0] >= 6:  # sm_60 or higher
+            logging.info("Using float16 as the GPU supports sm_60 or higher.")
+            return torch.float16
+        else:
+            logging.info("Using float32 as the GPU does not support float16 or bfloat16.")
+            return torch.float32
+
+    optimal_dtype = get_optimal_dtype()
+
+    # Load the model with the selected dtype
     try:
-        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, dtype=torch.bfloat16)
-    except:
-        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True)
+        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, torch_dtype=optimal_dtype)
+    except Exception as e:
+        logging.error(f"Failed to load model with {optimal_dtype}, falling back to float32. Error: {e}")
+        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, torch_dtype=torch.float32)
+
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
     model.to(device)
     return model, tokenizer
