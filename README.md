@@ -55,17 +55,17 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <th>Time</th>
     </tr>
     <tr>
-        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l20</td>
+        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l20</td>
+        <td>H100</td>
+        <td>16s</td>
+    </tr>
+    <tr>
         <td>A100</td>
         <td>19s</td>
     </tr>
     <tr>
         <td>A6000</td>
         <td>24s</td>
-    </tr>
-    <tr>
-        <td>A40</td>
-        <td>26s</td>
     </tr>
     <tr>
         <td>3090</td>
@@ -76,11 +76,19 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>25s</td>
     </tr>
     <tr>
+        <td>A40</td>
+        <td>26s</td>
+    </tr>
+    <tr>
         <td>2080</td>
         <td>44s</td>
     </tr>
     <tr>
-        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l24</td>
+        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l24</td>
+        <td>H100</td>
+        <td>21s</td>
+    </tr>
+    <tr>
         <td>A100</td>
         <td>27s</td>
     </tr>
@@ -89,12 +97,12 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>35s</td>
     </tr>
     <tr>
-        <td>A40</td>
-        <td>38s</td>
-    </tr>
-    <tr>
         <td>3090</td>
         <td>37s</td>
+    </tr>
+    <tr>
+        <td>A40</td>
+        <td>38s</td>
     </tr>
     <tr>
         <td>A5000</td>
@@ -105,11 +113,15 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>71s</td>
     </tr>
     <tr>
-        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l28</td>
+        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l28</td>
+        <td>H100</td>
+        <td>31s</td>
+    </tr>
+    <tr>
         <td>A100</td>
         <td>43s</td>
     </tr>
-        <tr>
+    <tr>
         <td>A6000</td>
         <td>62s</td>
     </tr>
@@ -130,11 +142,15 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>137s</td>
     </tr>
     <tr>
-        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l32</td>
+        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l32</td>
+        <td>H100</td>
+        <td>47s</td>
+    </tr>
+    <tr>
         <td>A100</td>
         <td>66s</td>
     </tr>
-        <tr>
+    <tr>
         <td>A6000</td>
         <td>94s</td>
     </tr>
