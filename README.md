@@ -55,9 +55,13 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <th>Time</th>
     </tr>
     <tr>
-        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l20</td>
+        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l20</td>
         <td>A100</td>
         <td>19s</td>
+    </tr>
+    <tr>
+        <td>A6000</td>
+        <td>24s</td>
     </tr>
     <tr>
         <td>A40</td>
@@ -68,17 +72,21 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>25s</td>
     </tr>
     <tr>
-        <td>A6000</td>
-        <td>24s</td>
-    </tr>
-    <tr>
         <td>A5000</td>
         <td>25s</td>
     </tr>
     <tr>
-        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l24</td>
+        <td>2080</td>
+        <td>44s</td>
+    </tr>
+    <tr>
+        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l24</td>
         <td>A100</td>
         <td>27s</td>
+    </tr>
+    <tr>
+        <td>A6000</td>
+        <td>35s</td>
     </tr>
     <tr>
         <td>A40</td>
@@ -89,17 +97,21 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>37s</td>
     </tr>
     <tr>
-        <td>A6000</td>
-        <td>35s</td>
-    </tr>
-    <tr>
         <td>A5000</td>
         <td>42s</td>
     </tr>
     <tr>
-        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l28</td>
+        <td>2080</td>
+        <td>71s</td>
+    </tr>
+    <tr>
+        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l28</td>
         <td>A100</td>
         <td>43s</td>
+    </tr>
+        <tr>
+        <td>A6000</td>
+        <td>62s</td>
     </tr>
     <tr>
         <td>A40</td>
@@ -110,17 +122,21 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>69s</td>
     </tr>
     <tr>
-        <td>A6000</td>
-        <td>62s</td>
-    </tr>
-    <tr>
         <td>A5000</td>
         <td>77s</td>
     </tr>
     <tr>
-        <td rowspan="5" style="text-align:center; vertical-align:middle;">PlantCaduceus_l32</td>
+        <td>2080</td>
+        <td>137s</td>
+    </tr>
+    <tr>
+        <td rowspan="6" style="text-align:center; vertical-align:middle;">PlantCaduceus_l32</td>
         <td>A100</td>
         <td>66s</td>
+    </tr>
+        <tr>
+        <td>A6000</td>
+        <td>94s</td>
     </tr>
     <tr>
         <td>A40</td>
@@ -131,14 +147,15 @@ The inference speed is highly dependent on the model size and GPU type, we teste
         <td>116s</td>
     </tr>
     <tr>
-        <td>A6000</td>
-        <td>94s</td>
-    </tr>
-    <tr>
         <td>A5000</td>
         <td>130s</td>
     </tr>
+    <tr>
+        <td>2080</td>
+        <td>232s</td>
+    </tr>
 </table>
+
 ## Pre-train PlantCaduceus with huggingface
 ```
 WANDB_PROJECT=PlantCaduceus python src/HF_pre_train.py --do_train 
@@ -151,6 +168,8 @@ WANDB_PROJECT=PlantCaduceus python src/HF_pre_train.py --do_train
     --run_name test --overwrite_output_dir \
     --output_dir "PlantCaduceus_train_1" --per_device_train_batch_size 32 --per_device_eval_batch_size 32 --gradient_accumulation_steps 4 --tokenizer_name 'kuleshov-group/PlantCaduceus_l20' --config_name 'kuleshov-group/PlantCaduceus_l20'
 ```
+
+
 
 
 ## Citation
