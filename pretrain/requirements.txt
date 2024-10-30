@@ -24,5 +24,5 @@ lightning
 
 # for mamba experiments
 # casual-conv1d<=1.0.2
-mamba-ssm==1.1.4
+mamba-ssm #
 #git+https://github.com/state-spaces/mamba
