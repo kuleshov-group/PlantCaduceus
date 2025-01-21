@@ -45,6 +45,9 @@ python src/zero_shot_score.py \
     -device 'cuda:1' # GPU device to dump embeddings
 ```
 
+**Note**: we would highly recommend using the largest model ([PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)) for the zero-shot score estimation.
+
+
 ### Inference speed test
 The inference speed is highly dependent on the model size and GPU type, we tested on some commonly used GPUs. With 5,000 SNPs, the inference speed is as follows:
 
