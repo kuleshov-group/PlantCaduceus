@@ -1,10 +1,22 @@
 # [PlantCaduceus: Cross-species Modeling of Plant Genomes at Single Nucleotide Resolution](https://plantcaduceus.github.io/)
 
-## Requirements
+## Creating the PlantCAD environment
 ```
-pytorch >= 2.0
-transformers >= 4.0
-mamba-ssm<=2.0.0
+conda env create -f env/environment.yml
+conda activate PlantCAD
+pip install -r env/requirements.txt --no-build-isolation
+```
+
+#### Testing if mamba_ssm is installed correctly
+```python
+import torch
+from mamba_ssm import Mamba
+```
+
+- If not, please re-install mamba_ssm by running the following command:
+```bash
+pip uninstall mamba-ssm
+pip install mamba-ssm==2.2.0 --no-build-isolation
 ```
 
 ## Using PlantCaduceus with Hugging Face
