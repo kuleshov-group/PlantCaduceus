@@ -71,6 +71,21 @@ python src/zero_shot_score.py \
 
 **Note**: we would highly recommend using the largest model ([PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)) for the zero-shot score estimation.
 
+- We also provide a pipeline to generate input files from VCF and genome FASTA files
+```bash
+# prepare bed
+inputVCF="input.vcf"
+genomeFA="genome.fa"
+output="snp_info.tsv" # this could be the input file of the zero_shot_score.py code
+grep -v '#' ${inputVCF} | awk -v OFS="\t" '{print $1,$2-256,$2+256}' > ${inputVCF}.bed
+bedtools getfasta -tab -fi ${genomeFA} -bed ${inputVCF}.bed -fo ${inputVCF}.seq.tsv
+awk -v OFS="\t" '{print $1,$2-256, $2+256,$2,$4,$5}' ${inputVCF} | paste - <(cut -f2 ${inputVCF}.seq.tsv) > ${output}_tmp
+# add header
+echo -e "chr\tstart\tend\tpos\tref\talt\tsequences" > ${output}
+cat ${output}_tmp >> ${output}
+rm ${inputVCF}.bed ${inputVCF}.seq.tsv ${output}_tmp
+```
+
 
 ### Inference speed test
 The inference speed is highly dependent on the model size and GPU type, we tested on some commonly used GPUs. With 5,000 SNPs, the inference speed is as follows:
