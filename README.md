@@ -34,8 +34,8 @@ Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The availab
     - Trained on sequences of length 512bp, with a model size of 256 and 32 layers.
 
 
-## Fine-tune PlantCaduceus
-We fine-tuned the PlantCaduceus by training an XGBoost model on top of the embedding for each task. The fine-tuning script is available in the `src` directory. The script takes the following arguments:
+## Training an XGBoost classifier using PlantCaduceus embeddings
+We trained an XGBoost model on top of the PlantCaduceus embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
 
 ```
 python src/fine_tune.py \
@@ -46,6 +46,8 @@ python src/fine_tune.py \
     -output ./output \ # output directory
     -device 'cuda:1' # GPU device to dump embeddings
 ```
+
+- The trained XGBoost classifiers in the paper are available [here](classifiers)
 
 ## Zero-shot score to estimate mutation effect
 We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. The script takes the following arguments:
