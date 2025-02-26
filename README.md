@@ -38,16 +38,26 @@ Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The availab
 We trained an XGBoost model on top of the PlantCaduceus embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
 
 ```
-python src/fine_tune.py \
+python src/train_XGBoost.py \
     -train train.tsv \ # training data, data format: https://huggingface.co/datasets/kuleshov-group/cross-species-single-nucleotide-annotation/tree/main/TIS
     -valid valid.tsv \ # validation data, the same format as the training data
     -test test_rice.tsv \ # test data (optional), the same format as the training data
     -model 'kuleshov-group/PlantCaduceus_l20' \ # pre-trained model name
     -output ./output \ # output directory
-    -device 'cuda:1' # GPU device to dump embeddings
+    -device 'cuda:0' # GPU device to dump embeddings
 ```
 
-- The trained XGBoost classifiers in the paper are available [here](classifiers)
+## Using the trained XGBoost classifiers
+The trained XGBoost classifiers in the paper are available [here](classifiers), the following script is used for prediction with XGBoost model
+```
+python src/predict_XGBoost.py \
+    -test test_rice.tsv \           
+    -model 'kuleshov-group/PlantCaduceus_l20' \ # pre-trained model
+    -classifier classifiers/PlantCaduceus_l20/TIS_XGBoost.json \  # the trained XGBoost classifier
+    -device 'cuda:0' \ # GPU device to dump embeddings
+    -output ./output # output directory
+```
+
 
 ## Zero-shot score to estimate mutation effect
 We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. The script takes the following arguments:
