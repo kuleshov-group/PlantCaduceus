@@ -4,7 +4,7 @@
 
 # [PlantCaduceus: A Plant DNA Language Model](https://plantcaduceus.github.io/)
 
-PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on the [Caduceus](https://arxiv.org/abs/2403.03234) architecture, which extends the efficient [Mamba](https://arxiv.org/abs/2312.00752) linear-time sequence modeling framework to incorporate bi-directionality and reverse complement equivariance, specifically designed for DNA sequences. PlantCAD is pre-trained on a curated dataset of 16 Angiosperm genomes. 
+PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on the [Caduceus](https://arxiv.org/abs/2403.03234) architecture, which extends the efficient [Mamba](https://arxiv.org/abs/2312.00752) linear-time sequence modeling framework to incorporate bi-directionality and reverse complement equivariance, specifically designed for DNA sequences. PlantCAD is pre-trained on a curated dataset of 16 Angiosperm genomes. PlantCAD showed state-of-the-art cross species performance in predicting TIS, TTS, Splice Donor and Splice Acceptor. The zero-shot of PlantCAD enables identifying genome-wide deleterious mutations and known causal variants in Arabidopsis, Sorghum and Maize.
 
 ## Creating the PlantCAD environment
 ```
@@ -25,11 +25,11 @@ pip uninstall mamba-ssm
 pip install mamba-ssm==2.2.0 --no-build-isolation
 ```
 
-## Using PlantCaduceus with Hugging Face
+## Using PlantCAD with Hugging Face
 
-The example notebook to use PlantCaduceus to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
+The example notebook to use PlantCAD to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
 
-Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The available models are:
+Pre-trained PlantCAD models have been uploaded to Hugging Face. The available models are:
 - PlantCaduceus_l20: [kuleshov-group/PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20)
     - Trained on sequences of length 512bp, with a model size of 256 and 20 layers.
 - PlantCaduceus_l24: [kuleshov-group/PlantCaduceus_l24](https://huggingface.co/kuleshov-group/PlantCaduceus_l24)
@@ -41,10 +41,10 @@ Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The availab
 
 ## Running PlantCaduceus on Google Colab
 
-Here's an example notebook to show how to run PlantCaduceus on google colab: [PlantCaduceus google colab](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link)
+Here's an example notebook to show how to run PlantCAD on google colab: [PlantCAD google colab](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link)
 
-## Training an XGBoost classifier using PlantCaduceus embeddings
-We trained an XGBoost model on top of the PlantCaduceus embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
+## Training an XGBoost classifier using PlantCAD embeddings
+We trained an XGBoost model on top of the PlantCAD embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
 
 ```
 python src/train_XGBoost.py \
@@ -223,9 +223,9 @@ The inference speed is highly dependent on the model size and GPU type, we teste
     </tr>
 </table>
 
-## Pre-train PlantCaduceus with huggingface
+## Pre-train PlantCAD with huggingface
 ```
-WANDB_PROJECT=PlantCaduceus python src/HF_pre_train.py --do_train 
+WANDB_PROJECT=PlantCAD python src/HF_pre_train.py --do_train 
     --report_to wandb --prediction_loss_only True --remove_unused_columns False --dataset_name 'kuleshov-group/Angiosperm_16_genomes' --soft_masked_loss_weight_train 0.1 --soft_masked_loss_weight_evaluation 0.0 \
     --weight_decay 0.01 --optim adamw_torch \
     --dataloader_num_workers 16 --preprocessing_num_workers 16 --seed 32 \
