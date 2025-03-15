@@ -1,4 +1,10 @@
-# [PlantCaduceus: Cross-species Modeling of Plant Genomes at Single Nucleotide Resolution](https://plantcaduceus.github.io/)
+<p align="center">
+  <img src="img/logo.jpg" alt="logo">
+</p>
+
+# [PlantCaduceus: A Plant DNA Language Model](https://plantcaduceus.github.io/)
+
+PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on the [Caduceus](https://arxiv.org/abs/2403.03234) architecture, which extends the efficient [Mamba](https://arxiv.org/abs/2312.00752) linear-time sequence modeling framework to incorporate bi-directionality and reverse complement equivariance, specifically designed for DNA sequences. PlantCAD is pre-trained on a curated dataset of 16 Angiosperm genomes. 
 
 ## Creating the PlantCAD environment
 ```
@@ -33,6 +39,9 @@ Pre-trained PlantCaduceus models have been uploaded to Hugging Face. The availab
 - PlantCaduceus_l32: [kuleshov-group/PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)
     - Trained on sequences of length 512bp, with a model size of 256 and 32 layers.
 
+## Running PlantCaduceus on Google Colab
+
+Here's an example notebook to show how to run PlantCaduceus on google colab: [PlantCaduceus google colab](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link)
 
 ## Training an XGBoost classifier using PlantCaduceus embeddings
 We trained an XGBoost model on top of the PlantCaduceus embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
