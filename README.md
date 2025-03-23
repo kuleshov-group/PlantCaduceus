@@ -1,13 +1,13 @@
 ![Static Badge](https://img.shields.io/badge/Linux-blue?logo=Linux&logoColor=white)
-![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/kuleshov-group/PlantCaduceus)
 ![GitHub Repo stars](https://img.shields.io/github/stars/kuleshov-group/PlantCaduceus)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/kuleshov-group/PlantCaduceus)
 [![DOI](https://zenodo.org/badge/DOI/10.1101/2024.06.04.596709.svg)](https://doi.org/10.1101/2024.06.04.596709)
-[![Hugging Face](https://img.shields.io/badge/🤗-Hugging%20Face-yellow.svg?style=flat)](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)
-<a href="https://huggingface.co/kuleshov-group/PlantCaduceus_l32">
+[![Hugging Face](https://img.shields.io/badge/🤗-Hugging%20Face-yellow.svg?style=flat)](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a)
+<a href="https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a">
   <img alt="Hugging Face Downloads" src="https://img.shields.io/badge/dynamic/json?color=blue&label=downloads&query=downloads&url=https://huggingface.co/api/models/kuleshov-group/PlantCaduceus_l32">
 </a>
 <p align="center">
-  <img src="img/logo.jpg" alt="logo" width="30%">
+  <img src="img/logo.jpg" alt="logo" width="20%">
 </p>
 
 # [PlantCaduceus: A Plant DNA Language Model](https://plantcaduceus.github.io/)
@@ -15,9 +15,7 @@
 PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on the [Caduceus](https://arxiv.org/abs/2403.03234) architecture, which extends the efficient [Mamba](https://arxiv.org/abs/2312.00752) linear-time sequence modeling framework to incorporate bi-directionality and reverse complement equivariance, specifically designed for DNA sequences. PlantCAD is pre-trained on a curated dataset of 16 Angiosperm genomes. PlantCAD showed state-of-the-art cross species performance in predicting TIS, TTS, Splice Donor and Splice Acceptor. The zero-shot of PlantCAD enables identifying genome-wide deleterious mutations and known causal variants in Arabidopsis, Sorghum and Maize.
 
 ## PlantCAD model summary
-Pre-trained PlantCAD models have been uploaded to <a href="https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a">
-  <img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="Hugging Face" width="20">
-</a>. Here's the summary of four PlantCAD models with different parameter sizes.
+Pre-trained PlantCAD models have been uploaded to [HuggingFace 🤗](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a). Here's the summary of four PlantCAD models with different parameter sizes.
 | Model | Sequence Length | Model Size | Embedding Size |
 |-------|----------------|------------|----------------|
 | [PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20) | 512bp | 20M | 384 |
