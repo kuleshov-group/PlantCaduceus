@@ -1,12 +1,36 @@
+![Static Badge](https://img.shields.io/badge/Linux-blue?logo=Linux&logoColor=white)
+![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/kuleshov-group/PlantCaduceus)
+![GitHub Repo stars](https://img.shields.io/github/stars/kuleshov-group/PlantCaduceus)
+[![DOI](https://zenodo.org/badge/DOI/10.1101/2024.06.04.596709.svg)](https://doi.org/10.1101/2024.06.04.596709)
+[![Hugging Face](https://img.shields.io/badge/🤗-Hugging%20Face-yellow.svg?style=flat)](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)
+<a href="https://huggingface.co/kuleshov-group/PlantCaduceus_l32">
+  <img alt="Hugging Face Downloads" src="https://img.shields.io/badge/dynamic/json?color=blue&label=downloads&query=downloads&url=https://huggingface.co/api/models/kuleshov-group/PlantCaduceus_l32">
+</a>
 <p align="center">
-  <img src="img/logo.jpg" alt="logo">
+  <img src="img/logo.jpg" alt="logo" width="30%">
 </p>
 
 # [PlantCaduceus: A Plant DNA Language Model](https://plantcaduceus.github.io/)
 
 PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on the [Caduceus](https://arxiv.org/abs/2403.03234) architecture, which extends the efficient [Mamba](https://arxiv.org/abs/2312.00752) linear-time sequence modeling framework to incorporate bi-directionality and reverse complement equivariance, specifically designed for DNA sequences. PlantCAD is pre-trained on a curated dataset of 16 Angiosperm genomes. PlantCAD showed state-of-the-art cross species performance in predicting TIS, TTS, Splice Donor and Splice Acceptor. The zero-shot of PlantCAD enables identifying genome-wide deleterious mutations and known causal variants in Arabidopsis, Sorghum and Maize.
 
-## Creating the PlantCAD environment
+## PlantCAD model summary
+Pre-trained PlantCAD models have been uploaded to <a href="https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a">
+  <img src="https://huggingface.co/front/assets/huggingface_logo-noborder.svg" alt="Hugging Face" width="20">
+</a>. Here's the summary of four PlantCAD models with different parameter sizes.
+| Model | Sequence Length | Model Size | Embedding Size |
+|-------|----------------|------------|----------------|
+| [PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20) | 512bp | 20M | 384 |
+| [PlantCaduceus_l24](https://huggingface.co/kuleshov-group/PlantCaduceus_l24) | 512bp | 40M | 512 |
+| [PlantCaduceus_l28](https://huggingface.co/kuleshov-group/PlantCaduceus_l28) | 512bp | 128M | 768 |
+| [PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32) | 512bp | 225M | 1024 |
+
+## Running PlantCaduceus demo on Google Colab
+Here's an example notebook to show how to run PlantCAD on google colab: [PlantCAD google colab](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link)
+
+**Note**: please make sure to set runtime to GPU/TPU when running google colab notebooks
+
+## Running PlantCaduceus locally (creating conda environment)
 ```
 conda env create -f env/environment.yml
 conda activate PlantCAD
@@ -24,24 +48,8 @@ from mamba_ssm import Mamba
 pip uninstall mamba-ssm
 pip install mamba-ssm==2.2.0 --no-build-isolation
 ```
-
-## Using PlantCAD with Hugging Face
-
 The example notebook to use PlantCAD to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
 
-Pre-trained PlantCAD models have been uploaded to Hugging Face. The available models are:
-- PlantCaduceus_l20: [kuleshov-group/PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20)
-    - Trained on sequences of length 512bp, with a model size of 256 and 20 layers.
-- PlantCaduceus_l24: [kuleshov-group/PlantCaduceus_l24](https://huggingface.co/kuleshov-group/PlantCaduceus_l24)
-    - Trained on sequences of length 512bp, with a model size of 256 and 24 layers.
-- PlantCaduceus_l28: [kuleshov-group/PlantCaduceus_l28](https://huggingface.co/kuleshov-group/PlantCaduceus_l28)
-    - Trained on sequences of length 512bp, with a model size of 256 and 28 layers.
-- PlantCaduceus_l32: [kuleshov-group/PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)
-    - Trained on sequences of length 512bp, with a model size of 256 and 32 layers.
-
-## Running PlantCaduceus on Google Colab
-
-Here's an example notebook to show how to run PlantCAD on google colab: [PlantCAD google colab](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link)
 
 ## Training an XGBoost classifier using PlantCAD embeddings
 We trained an XGBoost model on top of the PlantCAD embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
@@ -102,123 +110,52 @@ The inference speed is highly dependent on the model size and GPU type, we teste
 <table>
     <tr>
         <th>Model</th>
-        <th>GPU</th>
-        <th>Time</th>
+        <th>H100</th>
+        <th>A100</th>
+        <th>A6000</th>
+        <th>3090</th>
+        <th>A5000</th>
+        <th>A40</th>
+        <th>2080</th>
     </tr>
     <tr>
-        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l20</td>
-        <td>H100</td>
+        <td>PlantCaduceus_l20</td>
         <td>16s</td>
-    </tr>
-    <tr>
-        <td>A100</td>
         <td>19s</td>
-    </tr>
-    <tr>
-        <td>A6000</td>
         <td>24s</td>
-    </tr>
-    <tr>
-        <td>3090</td>
         <td>25s</td>
-    </tr>
-    <tr>
-        <td>A5000</td>
         <td>25s</td>
-    </tr>
-    <tr>
-        <td>A40</td>
         <td>26s</td>
-    </tr>
-    <tr>
-        <td>2080</td>
         <td>44s</td>
     </tr>
     <tr>
-        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l24</td>
-        <td>H100</td>
+        <td>PlantCaduceus_l24</td>
         <td>21s</td>
-    </tr>
-    <tr>
-        <td>A100</td>
         <td>27s</td>
-    </tr>
-    <tr>
-        <td>A6000</td>
         <td>35s</td>
-    </tr>
-    <tr>
-        <td>3090</td>
         <td>37s</td>
-    </tr>
-    <tr>
-        <td>A40</td>
-        <td>38s</td>
-    </tr>
-    <tr>
-        <td>A5000</td>
         <td>42s</td>
-    </tr>
-    <tr>
-        <td>2080</td>
+        <td>38s</td>
         <td>71s</td>
     </tr>
     <tr>
-        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l28</td>
-        <td>H100</td>
+        <td>PlantCaduceus_l28</td>
         <td>31s</td>
-    </tr>
-    <tr>
-        <td>A100</td>
         <td>43s</td>
-    </tr>
-    <tr>
-        <td>A6000</td>
         <td>62s</td>
-    </tr>
-    <tr>
-        <td>A40</td>
-        <td>67s</td>
-    </tr>
-    <tr>
-        <td>3090</td>
         <td>69s</td>
-    </tr>
-    <tr>
-        <td>A5000</td>
         <td>77s</td>
-    </tr>
-    <tr>
-        <td>2080</td>
+        <td>67s</td>
         <td>137s</td>
     </tr>
     <tr>
-        <td rowspan="7" style="text-align:center; vertical-align:middle;">PlantCaduceus_l32</td>
-        <td>H100</td>
+        <td>PlantCaduceus_l32</td>
         <td>47s</td>
-    </tr>
-    <tr>
-        <td>A100</td>
         <td>66s</td>
-    </tr>
-    <tr>
-        <td>A6000</td>
         <td>94s</td>
-    </tr>
-    <tr>
-        <td>A40</td>
-        <td>107s</td>
-    </tr>
-    <tr>
-        <td>3090</td>
         <td>116s</td>
-    </tr>
-    <tr>
-        <td>A5000</td>
         <td>130s</td>
-    </tr>
-    <tr>
-        <td>2080</td>
+        <td>107s</td>
         <td>232s</td>
     </tr>
 </table>
@@ -235,9 +172,6 @@ WANDB_PROJECT=PlantCAD python src/HF_pre_train.py --do_train
     --run_name test --overwrite_output_dir \
     --output_dir "PlantCaduceus_train_1" --per_device_train_batch_size 32 --per_device_eval_batch_size 32 --gradient_accumulation_steps 4 --tokenizer_name 'kuleshov-group/PlantCaduceus_l20' --config_name 'kuleshov-group/PlantCaduceus_l20'
 ```
-
-
-
 
 ## Citation
 ```bibtex
