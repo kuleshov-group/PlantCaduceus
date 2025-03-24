@@ -3,7 +3,7 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
-import argparse, os, sys
+import argparse, sys
 from tqdm import tqdm
 import logging
 import vcf
@@ -136,9 +136,8 @@ def zero_shot_score_vcf(args, recordIndices, logits):
     logging.info("Calculating zero-shot scores")
     nucleotides = ['A', 'C', 'G', 'T']
 
-    out_file = open(args.output, "w")
     reader = vcf.Reader(filename=args.inputVCF)
-    writer = vcf.Writer(out_file, reader)
+    writer = vcf.Writer(open(args.output, "w"), reader)
 
     currentIdx = 0
 
@@ -165,7 +164,7 @@ def zero_shot_score_vcf(args, recordIndices, logits):
             rIdx += 1
         currentIdx += 1
 
-    out_file.close()
+    writer.close()
 
 
 def seq_from_vcf(args):
