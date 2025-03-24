@@ -164,5 +164,3 @@ dependencies:
   - zlib=1.2.13
   - zstd=1.5.5
   - packaging=24.2
-  - pip:
-      git@github.com/dridk/PyVCF3.git@master:
