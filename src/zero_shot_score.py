@@ -3,21 +3,37 @@ import torch
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
-import argparse, os
+import argparse, sys
 from tqdm import tqdm
 import logging
+import vcf
+from Bio import SeqIO
+import gzip
+
 
 def parse_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-input", dest="inputDF", type=str, default=None, help="The directory of input tab-separated file")
+    inputGroup = parser.add_mutually_exclusive_group(required=True)
+    inputGroup.add_argument("-input-table", dest="inputDF", type=str, default=None,
+                            help="The directory of input tab-separated file. Required columns: ref, alt, sequences")
+    inputGroup.add_argument("-input-vcf", dest="inputVCF", type=str, default=None,
+                            help="The directory of input vcf")
+    parser.add_argument("-input-fasta", dest="inputFasta", type=str, default=None,
+                        help="The directory of input fasta. Required if using VCF")
     parser.add_argument("-output", dest="output", default=None, help="The directory of output")
     parser.add_argument("-model", dest="model", default=None, help="The directory of pre-trained model")
     parser.add_argument("-device", dest="device", default="cuda:0", help="The device to run the model")
     parser.add_argument("-batchSize", dest="batchSize", default=128, type=int, help="The batch size for the model")
-    parser.add_argument("-numWorkers", dest="numWorkers", default=4, type=int, help="The number of workers for the model")
+    parser.add_argument("-numWorkers", dest="numWorkers", default=4, type=int,
+                        help="The number of workers for the model")
     parser.add_argument("-tokenIdx", dest="tokenIdx", default=255, type=int, help="The index of the nucleotide to mask")
     args = parser.parse_args()
+
+    if args.inputVCF is not None and args.inputFasta is None:
+        sys.exit("-input-fasta is required with -input-vcf")
+
     return args
+
 
 class SequenceDataset(Dataset):
     def __init__(self, sequences, tokenizer, tokenIdx):
@@ -37,7 +53,7 @@ class SequenceDataset(Dataset):
             return_token_type_ids=False
         )
         input_ids = encoding['input_ids']
-        input_ids[0, self.tokenIdx] = self.tokenizer.mask_token_id # mask the specified token index
+        input_ids[0, self.tokenIdx] = self.tokenizer.mask_token_id  # mask the specified token index
         return {
             'sequence': sequence,
             'input_ids': input_ids
@@ -46,12 +62,12 @@ class SequenceDataset(Dataset):
 
 def load_model_and_tokenizer(model_dir, device):
     logging.info(f"Loading model and tokenizer from {model_dir}")
-    
+
     # Determine the appropriate dtype based on the GPU capabilities
     def get_optimal_dtype():
         if not torch.cuda.is_available():
             logging.info("Using float32 as no GPU is available.")
-            return torch.float32  
+            return torch.float32
 
         device_index = torch.cuda.current_device()
         capability = torch.cuda.get_device_capability(device_index)
@@ -79,10 +95,12 @@ def load_model_and_tokenizer(model_dir, device):
     model.to(device)
     return model, tokenizer
 
+
 def create_dataloader(sequences, tokenizer, batch_size, tokenIdx):
     logging.info(f"Creating DataLoader with batch size {batch_size}")
     dataset = SequenceDataset(sequences, tokenizer, tokenIdx)
     return DataLoader(dataset, batch_size=batch_size, shuffle=False)
+
 
 def extract_logits(model, dataloader, device, tokenIdx, tokenizer):
     logging.info("Extracting logits")
@@ -94,10 +112,12 @@ def extract_logits(model, dataloader, device, tokenIdx, tokenizer):
         with torch.inference_mode():
             outputs = model(input_ids=curIDs)
         all_logits = outputs.logits
-        logits = all_logits[:, tokenIdx, [tokenizer.get_vocab()[nc] for nc in nucleotides]] # get the logits for the masked token
+        logits = all_logits[:, tokenIdx,
+                 [tokenizer.get_vocab()[nc] for nc in nucleotides]]  # get the logits for the masked token
         probs = torch.nn.functional.softmax(logits.cpu(), dim=1).numpy()
         results.append(probs)
     return np.concatenate(results, axis=0)
+
 
 def zero_shot_score(snpDF, logits):
     logging.info("Calculating zero-shot scores")
@@ -111,6 +131,87 @@ def zero_shot_score(snpDF, logits):
         res.append(np.log(altProb / refProb))
     return res
 
+
+def zero_shot_score_vcf(args, recordIndices, logits):
+    logging.info("Calculating zero-shot scores")
+    nucleotides = ['A', 'C', 'G', 'T']
+
+    reader = vcf.Reader(filename=args.inputVCF)
+    writer = vcf.Writer(open(args.output, "w"), reader)
+
+    currentIdx = 0
+
+    rIdx = 0
+    for record in reader:
+        if currentIdx == recordIndices[rIdx]:
+            scores = []
+
+            refAllele = record.REF
+            refProb = logits[rIdx][nucleotides.index(refAllele)]
+
+            for alt in record.ALT:
+                if alt.type == "SNV":
+                    altAllele = alt.sequence
+                    altProb = logits[rIdx][nucleotides.index(altAllele)]
+                    scores.append(np.log(altProb / refProb))
+                else:
+                    scores.append(".")
+
+            record.INFO["plantCAD_zero_shot"] = ",".join(str(zs) for zs in scores)
+
+            writer.write_record(record)
+
+            rIdx += 1
+        currentIdx += 1
+
+    writer.close()
+
+
+def seq_from_vcf(args):
+    logging.info(f"Reading input data from {args.inputVCF}")
+
+    # load fasta
+    if args.inputFasta.endswith(".gz"):
+        with gzip.open(args.inputFasta, "rt") as file:
+            fastaDict = SeqIO.to_dict(SeqIO.parse(file, "fasta"))
+    else:
+        fastaDict = SeqIO.to_dict(SeqIO.parse(args.inputFasta, "fasta"))
+
+    sequences = []
+    recordIndices = []  # keep track of which record a sequence belongs to
+    vcfReader = vcf.Reader(filename=args.inputVCF)
+    recordIdx = 0
+    prevChrom = ""
+    addIdx = 512 - args.tokenIdx
+
+    for record in vcfReader:
+        if any([alt.type == "SNV" for alt in record.ALT]):
+            chrom = record.CHROM
+            pos = record.POS - 1  # convert to zero-based indexing
+
+            try:
+                if pos - args.tokenIdx < 0:
+                    seq = str(fastaDict[chrom][0:pos + addIdx].seq).upper().rjust(512, "N")
+                else:
+                    seq = str(fastaDict[chrom][pos - args.tokenIdx:pos + addIdx].seq).upper().ljust(512, "N")
+
+                sequences.append(seq)
+                recordIndices.append(recordIdx)
+
+                # RAM saving: remove chromosomes when the corresponding vcf records have been processed
+                if prevChrom != chrom:
+                    if prevChrom != "":
+                        fastaDict.pop(prevChrom)
+                    prevChrom = chrom
+            except:
+                print("Error processing VCF at record " + str(recordIdx))
+                print("Check that VCF file is sorted and chromosome names match FASTA file.")
+                print(record)
+                sys.exit()
+        recordIdx += 1
+    return sequences, recordIndices
+
+
 def main():
     logging.basicConfig(
         level=logging.INFO,
@@ -118,13 +219,18 @@ def main():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     args = parse_args()
-    
-    logging.info(f"Reading input data from {args.inputDF}")
-    snpDF = pd.read_csv(args.inputDF, delimiter='\t')
-    logging.info("Filtering out invalid SNPs")
-    logging.info(f"Filtered out {len(snpDF) - len(snpDF[snpDF['ref'].isin(['A', 'C', 'G', 'T']) & snpDF['alt'].isin(['A', 'C', 'G', 'T'])])} invalid SNPs")
-    snpDF = snpDF[snpDF['ref'].isin(['A', 'C', 'G', 'T']) & snpDF['alt'].isin(['A', 'C', 'G', 'T'])]
-    sequences = snpDF['sequences'].tolist()
+
+    if args.inputDF is not None:
+
+        logging.info(f"Reading input data from {args.inputDF}")
+        snpDF = pd.read_csv(args.inputDF, delimiter='\t')
+        logging.info("Filtering out invalid SNPs")
+        logging.info(
+            f"Filtered out {len(snpDF) - len(snpDF[snpDF['ref'].isin(['A', 'C', 'G', 'T']) & snpDF['alt'].isin(['A', 'C', 'G', 'T'])])} invalid SNPs")
+        snpDF = snpDF[snpDF['ref'].isin(['A', 'C', 'G', 'T']) & snpDF['alt'].isin(['A', 'C', 'G', 'T'])]
+        sequences = snpDF['sequences'].tolist()
+    else:  # get sequence from fasta
+        sequences, recordIndices = seq_from_vcf(args)
 
     model, tokenizer = load_model_and_tokenizer(args.model, args.device)
 
@@ -133,11 +239,15 @@ def main():
 
     logits = extract_logits(model, loader, args.device, args.tokenIdx, tokenizer)
 
-    scores = zero_shot_score(snpDF, logits)
+    if args.inputDF is not None:
+        scores = zero_shot_score(snpDF, logits)
 
-    snpDF['zeroShotScore'] = scores
-    logging.info(f"Writing output data to {args.output}")
-    snpDF.to_csv(args.output, sep='\t', index=False)
+        snpDF['zeroShotScore'] = scores
+        logging.info(f"Writing output data to {args.output}")
+        snpDF.to_csv(args.output, sep='\t', index=False)
+    else:
+        zero_shot_score_vcf(args, recordIndices, logits)
+
 
 if __name__ == "__main__":
     main()
