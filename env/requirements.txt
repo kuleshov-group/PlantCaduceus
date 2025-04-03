@@ -1,3 +1,7 @@
+pandas
+numpy
+scipy
+biopython
 xgboost
 scikit-learn
 matplotlib
