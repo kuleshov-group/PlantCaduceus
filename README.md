@@ -13,12 +13,12 @@
 ## Table of Contents
 - [PlantCAD overview](#plantcad-overview)
 - [Model summary](#plantcad-model-summary)
-- [Running PlantCaduceus demo on Google Colab](#running-plantcaduceus-demo-on-google-colab)
-- [Running PlantCaduceus locally (creating conda environment)](#running-plantcaduceus-locally-creating-conda-environment)
-  - [Testing if mamba_ssm is installed correctly](#testing-if-mamba_ssm-is-installed-correctly)
-- [Training an XGBoost classifier using PlantCAD embeddings](#training-an-xgboost-classifier-using-plantcad-embeddings)
-- [Using the trained XGBoost classifiers](#using-the-trained-xgboost-classifiers)
-- [Zero-shot score to estimate mutation effect](#zero-shot-score-to-estimate-mutation-effect)
+- [Run PlantCaduceus demo on Google Colab](#run-plantcaduceus-demo-on-google-colab)
+- [Run PlantCaduceus locally (creating conda environment)](#run-plantcaduceus-locally-creating-conda-environment)
+  - [Test if mamba_ssm is installed correctly](#testing-if-mamba_ssm-is-installed-correctly)
+- [Train an XGBoost classifier using PlantCAD embeddings](#train-an-xgboost-classifier-using-plantcad-embeddings)
+- [Use the trained XGBoost classifiers](#use-the-trained-xgboost-classifiers)
+- [Estimate mutation effect with zero-shot strategy](#zero-shot-score-to-estimate-mutation-effect)
 - [Inference speed test](#inference-speed-test)
 - [Pre-train PlantCAD with huggingface](#pre-train-plantcad-with-huggingface)
 - [Citation](#citation)
@@ -36,19 +36,19 @@ Pre-trained PlantCAD models have been uploaded to [HuggingFace 🤗](https://hug
 | [PlantCaduceus_l28](https://huggingface.co/kuleshov-group/PlantCaduceus_l28) | 512bp | 128M | 768 |
 | [PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32) | 512bp | 225M | 1024 |
 
-## Running PlantCaduceus demo on Google Colab
+## Run PlantCaduceus demo on Google Colab
 Here's an example notebook to show how to run PlantCAD on google colab: [PlantCAD google colab](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link)
 
 **Note**: please make sure to set runtime to GPU/TPU when running google colab notebooks
 
-## Running PlantCaduceus locally (creating conda environment)
+## Run PlantCaduceus locally (creating conda environment)
 ```
 conda env create -f env/environment.yml
 conda activate PlantCAD
 pip install -r env/requirements.txt --no-build-isolation
 ```
 
-#### Testing if mamba_ssm is installed correctly
+#### Test if mamba_ssm is installed correctly
 ```python
 import torch
 from mamba_ssm import Mamba
@@ -75,7 +75,7 @@ python src/train_XGBoost.py \
     -device 'cuda:0' # GPU device to dump embeddings
 ```
 
-## Using the trained XGBoost classifiers
+## Use the trained XGBoost classifiers
 The trained XGBoost classifiers in the paper are available [here](classifiers), the following script is used for prediction with XGBoost model
 ```
 python src/predict_XGBoost.py \
