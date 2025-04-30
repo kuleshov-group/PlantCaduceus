@@ -10,7 +10,20 @@
   <img src="img/logo.jpg" alt="logo" width="20%">
 </p>
 
-# [PlantCaduceus: A Plant DNA Language Model](https://plantcaduceus.github.io/)
+## Table of Contents
+- [PlantCAD overview](#plantcad-overview)
+- [Model summary](#plantcad-model-summary)
+- [Running PlantCaduceus demo on Google Colab](#running-plantcaduceus-demo-on-google-colab)
+- [Running PlantCaduceus locally (creating conda environment)](#running-plantcaduceus-locally-creating-conda-environment)
+  - [Testing if mamba_ssm is installed correctly](#testing-if-mamba_ssm-is-installed-correctly)
+- [Training an XGBoost classifier using PlantCAD embeddings](#training-an-xgboost-classifier-using-plantcad-embeddings)
+- [Using the trained XGBoost classifiers](#using-the-trained-xgboost-classifiers)
+- [Zero-shot score to estimate mutation effect](#zero-shot-score-to-estimate-mutation-effect)
+- [Inference speed test](#inference-speed-test)
+- [Pre-train PlantCAD with huggingface](#pre-train-plantcad-with-huggingface)
+- [Citation](#citation)
+
+## [PlantCAD overview](https://plantcaduceus.github.io/)
 
 PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on the [Caduceus](https://arxiv.org/abs/2403.03234) architecture, which extends the efficient [Mamba](https://arxiv.org/abs/2312.00752) linear-time sequence modeling framework to incorporate bi-directionality and reverse complement equivariance, specifically designed for DNA sequences. PlantCAD is pre-trained on a curated dataset of 16 Angiosperm genomes. PlantCAD showed state-of-the-art cross species performance in predicting TIS, TTS, Splice Donor and Splice Acceptor. The zero-shot of PlantCAD enables identifying genome-wide deleterious mutations and known causal variants in Arabidopsis, Sorghum and Maize.
 
@@ -75,18 +88,23 @@ python src/predict_XGBoost.py \
 
 
 ## Zero-shot score to estimate mutation effect
-We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. The script takes the following arguments:
+We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. 
+
+#### Using vcf files as input
 ```
 python src/zero_shot_score.py \
-    -input examples/example_snp.tsv \ 
-    -output output.tsv \
-    -model 'kuleshov-group/PlantCaduceus_l32' \ # pre-trained model name
-    -device 'cuda:1' # GPU device to dump embeddings
+    -input-vcf examples/example_maize_snp.vcf \
+    -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
+    -output example_output.vcf \
+    -model 'kuleshov-group/PlantCaduceus_l32' \
+    -device 'cuda:0'
 ```
 
-**Note**: we would highly recommend using the largest model ([PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)) for the zero-shot score estimation.
+The maize reference genome can be downloaded from [here](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0.fa.gz)
 
-- We also provide a pipeline to generate input files from VCF and genome FASTA files
+#### Prepare input files from VCF
+
+Here's the pipeline to prepare input files from VCF
 ```bash
 # prepare bed
 inputVCF="input.vcf"
@@ -101,8 +119,20 @@ cat ${output}_tmp >> ${output}
 rm ${inputVCF}.bed ${inputVCF}.seq.tsv ${output}_tmp
 ```
 
+Then getting zero-shot scores with this code.
 
-### Inference speed test
+```
+python src/zero_shot_score.py \
+    -input examples/example_snp.tsv \ 
+    -output output.tsv \
+    -model 'kuleshov-group/PlantCaduceus_l32' \ # pre-trained model name
+    -device 'cuda:0' # GPU device to dump embeddings
+```
+
+**Note**: we would highly recommend using the largest model ([PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)) for the zero-shot score estimation.
+
+
+## Inference speed test
 The inference speed is highly dependent on the model size and GPU type, we tested on some commonly used GPUs. With 5,000 SNPs, the inference speed is as follows:
 
 <table>
