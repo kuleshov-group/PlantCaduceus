@@ -62,7 +62,7 @@ pip install mamba-ssm==2.2.0 --no-build-isolation
 The example notebook to use PlantCAD to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
 
 
-## Training an XGBoost classifier using PlantCAD embeddings
+## Train an XGBoost classifier using PlantCAD embeddings
 We trained an XGBoost model on top of the PlantCAD embedding for each task to evaluate its performance. The script is available in the `src` directory. The script takes the following arguments:
 
 ```
