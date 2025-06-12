@@ -202,15 +202,4 @@ WANDB_PROJECT=PlantCAD python src/HF_pre_train.py --do_train
 ```
 
 ## Citation
-```bibtex
-@article {Zhai2024.06.04.596709,
-    author = {Zhai, Jingjing and Gokaslan, Aaron and Schiff, Yair and Berthel, Ana and Liu, Zong-Yan and Miller, Zachary R and Scheben, Armin and Stitzer, Michelle C and Romay, Cinta and Buckler, Edward S. and Kuleshov, Volodymyr},
-    title = {Cross-species plant genomes modeling at single nucleotide resolution using a pre-trained DNA language model},
-    elocation-id = {2024.06.04.596709},
-    year = {2024},
-    doi = {10.1101/2024.06.04.596709},
-    URL = {https://www.biorxiv.org/content/early/2024/06/05/2024.06.04.596709},
-    eprint = {https://www.biorxiv.org/content/early/2024/06/05/2024.06.04.596709.full.pdf},
-    journal = {bioRxiv}
-}
-```
+Zhai, J., Gokaslan, A., Schiff, Y., Berthel, A., Liu, Z. Y., Lai, W. L., Miller, Z. R., Scheben, A., Stitzer, M. C., Romay, M. C., Buckler, E. S., & Kuleshov, V. (2025). Cross-species modeling of plant genomes at single nucleotide resolution using a pretrained DNA language model. Proceedings of the National Academy of Sciences, 122(24), e2421738122. https://doi.org/10.1073/pnas.2421738122
