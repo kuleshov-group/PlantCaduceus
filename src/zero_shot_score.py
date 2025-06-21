@@ -21,6 +21,8 @@ def parse_args():
     parser.add_argument("-input-fasta", dest="inputFasta", type=str, default=None,
                         help="The directory of input fasta. Required if using VCF")
     parser.add_argument("-output", dest="output", default=None, help="The directory of output")
+    parser.add_argument("-outBED", action="store_true", dest="outBED", default=False,
+                        help="Output in BED format instead of tab-separated file, only works with -input-table")
     parser.add_argument("-model", dest="model", default=None, help="The directory of pre-trained model")
     parser.add_argument("-device", dest="device", default="cuda:0", help="The device to run the model")
     parser.add_argument("-batchSize", dest="batchSize", default=128, type=int, help="The batch size for the model")
@@ -243,10 +245,18 @@ def main():
         scores = zero_shot_score(snpDF, logits)
 
         snpDF['zeroShotScore'] = scores
-        logging.info(f"Writing output data to {args.output}")
-        snpDF.to_csv(args.output, sep='\t', index=False)
+        if args.outBED:
+            logging.info("Outputting results in BED format")
+            snpDF['start'] = snpDF['pos'] - 1
+            snpDF['end'] = snpDF['pos']
+            snpDF = snpDF[['chr', 'start', 'end', 'ref', 'alt', 'zeroShotScore']]
+            snpDF.to_csv(args.output, sep='\t', index=False, header=False)
+        else:
+            logging.info("Outputting results in tab-separated format")
+            snpDF.to_csv(args.output, sep='\t', index=False)
     else:
         zero_shot_score_vcf(args, recordIndices, logits)
+    logging.info(f"Zero-shot scores saved to {args.output}")
 
 
 if __name__ == "__main__":
