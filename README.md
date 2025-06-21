@@ -88,7 +88,7 @@ python src/predict_XGBoost.py \
 
 
 ## Zero-shot score to estimate mutation effect
-We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. 
+We used the log-likelihood difference between the reference and the alternative alleles to estimate the mutation effect. The script is available in the `src` directory. The maize reference genome can be downloaded from [here](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0.fa.gz)
 
 #### Using vcf files as input
 ```
@@ -99,11 +99,11 @@ python src/zero_shot_score.py \
     -model 'kuleshov-group/PlantCaduceus_l32' \
     -device 'cuda:0'
 ```
+**The output zero-shot scores from PlantCAD are located in the INFO field of the output VCF file**
 
-The maize reference genome can be downloaded from [here](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0.fa.gz)
 
 #### Prepare input files from VCF
-However, we also provide a pipeline to provide an intuitive table format to use as the input PlantCAD.
+However, we also provide a pipeline that generates an intuitive table format for use as input to PlantCAD.
 
 ```bash
 bash src/format_VCF.sh \
@@ -111,23 +111,19 @@ bash src/format_VCF.sh \
      Zm-B73-REFERENCE-NAM-5.0.fa \ # reference genome
      example_snp.tsv  # output file
 ```
-
-This script extracts upstream 255bp and downstream 256bp, with the SNP at position 256 (one-based coordinate). Dependencies include 'samtools' for FASTA indexing, 'bedtools' for sequence extraction, and 'awk' for text processing. 
-
-The original script was adapted from @pmorrell repository (https://github.com/pmorrell/Utilities/blob/master/PlantCaduceus_format.sh).
+This script extracts upstream 255bp and downstream 256bp, with the SNP at position 256 (one-based coordinate). Dependencies include `samtools` for FASTA indexing, `bedtools` for sequence extraction, and `awk` for text processing. The original script was adapted from @pmorrell repository (https://github.com/pmorrell/Utilities/blob/master/PlantCaduceus_format.sh).
 
 Then getting zero-shot scores with this code.
-
 ```
 python src/zero_shot_score.py \
     -input-table examples/example_snp.tsv \ 
     -output output.tsv \
     -model 'kuleshov-group/PlantCaduceus_l32' \ # pre-trained model name
-    -device 'cuda:0' # GPU device
+    -device 'cuda:0' # GPU device \
+    -outBED # output BED format (optional)
 ```
 
 **Note**: we would highly recommend using the largest model ([PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)) for the zero-shot score estimation.
-
 
 ## Inference speed test
 The inference speed is highly dependent on the model size and GPU type, we tested on some commonly used GPUs. With 5,000 SNPs, the inference speed is as follows:
