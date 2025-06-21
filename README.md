@@ -103,30 +103,27 @@ python src/zero_shot_score.py \
 The maize reference genome can be downloaded from [here](https://download.maizegdb.org/Zm-B73-REFERENCE-NAM-5.0/Zm-B73-REFERENCE-NAM-5.0.fa.gz)
 
 #### Prepare input files from VCF
+However, we also provide a pipeline to provide an intuitive table format to use as the input PlantCAD.
 
-Here's the pipeline to prepare input files from VCF
 ```bash
-# prepare bed
-inputVCF="input.vcf"
-genomeFA="genome.fa"
-output="snp_info.tsv" # this could be the input file of the zero_shot_score.py code
-grep -v '#' ${inputVCF} | awk -v OFS="\t" '{print $1,$2-256,$2+256}' > ${inputVCF}.bed
-bedtools getfasta -tab -fi ${genomeFA} -bed ${inputVCF}.bed -fo ${inputVCF}.seq.tsv
-awk -v OFS="\t" '{print $1,$2-256, $2+256,$2,$4,$5}' ${inputVCF} | paste - <(cut -f2 ${inputVCF}.seq.tsv) > ${output}_tmp
-# add header
-echo -e "chr\tstart\tend\tpos\tref\talt\tsequences" > ${output}
-cat ${output}_tmp >> ${output}
-rm ${inputVCF}.bed ${inputVCF}.seq.tsv ${output}_tmp
+bash src/format_VCF.sh \
+     examples/example_maize_snp.vcf \ # input vcf
+     Zm-B73-REFERENCE-NAM-5.0.fa \ # reference genome
+     example_snp.tsv  # output file
 ```
+
+This script extracts upstream 255bp and downstream 256bp, with the SNP at position 256 (one-based coordinate). Dependencies include 'samtools' for FASTA indexing, 'bedtools' for sequence extraction, and 'awk' for text processing. 
+
+The original script was adapted from @pmorrell repository (https://github.com/pmorrell/Utilities/blob/master/PlantCaduceus_format.sh).
 
 Then getting zero-shot scores with this code.
 
 ```
 python src/zero_shot_score.py \
-    -input examples/example_snp.tsv \ 
+    -input-table examples/example_snp.tsv \ 
     -output output.tsv \
     -model 'kuleshov-group/PlantCaduceus_l32' \ # pre-trained model name
-    -device 'cuda:0' # GPU device to dump embeddings
+    -device 'cuda:0' # GPU device
 ```
 
 **Note**: we would highly recommend using the largest model ([PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)) for the zero-shot score estimation.
