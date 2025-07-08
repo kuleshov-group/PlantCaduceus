@@ -45,7 +45,7 @@ singularity run -C \
     -gff $ANNOTATION \
     -fasta $REFERENCE \
     --force_overwrite \
-    --per_gene
+    --per_gene --pick
 ```
 
 ### 3. Downsample the annotated VCF file (optional)
