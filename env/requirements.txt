@@ -1,9 +1,9 @@
-pandas
-numpy
-scipy
+pandas==2.1.4
+numpy<2
+scipy==1.12.0
 biopython
-xgboost
-scikit-learn
+xgboost==2.0.3
+scikit-learn==1.4.0
 matplotlib
 transformers==4.40.0
 causal-conv1d==1.4.0
