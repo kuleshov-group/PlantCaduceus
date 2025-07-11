@@ -1,4 +1,5 @@
 import random, sys
+from collections import defaultdict
 
 input_vcf = sys.argv[1]
 output_vcf = sys.argv[2]
