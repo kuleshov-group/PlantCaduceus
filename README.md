@@ -48,7 +48,7 @@ conda env create -f env/environment.yml
 conda activate PlantCAD
 pip install -r env/requirements.txt --no-build-isolation
 ```
-Please check out [issues #10]() if you want to install PlantCAD with just `pip`
+Please check out [issues #10](https://github.com/kuleshov-group/PlantCaduceus/issues/10) if you want to install PlantCAD with just `pip`
 
 #### Test if mamba_ssm is installed correctly
 ```python
