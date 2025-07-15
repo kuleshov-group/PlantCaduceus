@@ -42,11 +42,13 @@ Here's an example notebook to show how to run PlantCAD on google colab: [PlantCA
 **Note**: please make sure to set runtime to GPU/TPU when running google colab notebooks
 
 ## Run PlantCaduceus locally (creating conda environment)
+
 ```
 conda env create -f env/environment.yml
 conda activate PlantCAD
 pip install -r env/requirements.txt --no-build-isolation
 ```
+Please check out [issues #10]() if you want to install PlantCAD with just `pip`
 
 #### Test if mamba_ssm is installed correctly
 ```python
@@ -60,6 +62,7 @@ pip uninstall mamba-ssm
 pip install mamba-ssm==2.2.0 --no-build-isolation
 ```
 The example notebook to use PlantCAD to get embeddings and logits score is available in the `notebooks/examples.ipynb` directory. 
+
 
 
 ## Train an XGBoost classifier using PlantCAD embeddings
