@@ -37,7 +37,7 @@ PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on t
 
 ## Quick Start
 
-**New to PlantCAD?** Try our [Google Colab demo](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link) - no installation required!
+**New to PlantCAD?** Try our [Google Colab demo](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=sharing) - no installation required!
 
 **For local usage:** See installation instructions below, then use `notebooks/examples.ipynb` to get started.
 
@@ -63,7 +63,7 @@ Pre-trained PlantCAD models have been uploaded to [HuggingFace 🤗](https://hug
 ## Installation
 
 ### Option 1: Google Colab (Recommended for beginners)
-**No installation required!** Just open our [PlantCAD Google Colab notebook](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=drive_link) and start analyzing your data.
+**No installation required!** Just open our [PlantCAD Google Colab notebook](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=sharing) and start analyzing your data.
 
 **Setup steps:**
 1. Open the Colab link
@@ -94,10 +94,13 @@ pip install -r env/requirements.txt --no-build-isolation
 # Test core dependencies
 import torch
 from mamba_ssm import Mamba
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModelForMaskedLM
 
 # Test PlantCAD model loading
-tokenizer = AutoTokenizer.from_pretrained('kuleshov-group/PlantCaduceus_l20')
+tokenizer = AutoTokenizer.from_pretrained('kuleshov-group/PlantCaduceus_l32')
+model = AutoModelForMaskedLM.from_pretrained('kuleshov-group/PlantCaduceus_l32', trust_remote_code=True)
+device = 'cuda:0'
+model.to(device)
 print("✅ Installation successful!")
 ```
 
@@ -126,25 +129,43 @@ The easiest way to start is with our example notebook: `notebooks/examples.ipynb
 
 **Quick example - Get sequence embeddings:**
 ```python
-from transformers import AutoTokenizer, AutoModel
 import torch
+from mamba_ssm import Mamba
+from transformers import AutoTokenizer, AutoModelForMaskedLM
+import pandas as pd
 
-# Load model and tokenizer
-model_name = 'kuleshov-group/PlantCaduceus_l20'  # Start with smaller model
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModel.from_pretrained(model_name)
-
+device = 'cuda:0'
+# Test PlantCAD model loading
+tokenizer = AutoTokenizer.from_pretrained('kuleshov-group/PlantCaduceus_l32')
+model = AutoModelForMaskedLM.from_pretrained('kuleshov-group/PlantCaduceus_l32', trust_remote_code=True)
+model.to(device)
 # Example plant DNA sequence (512bp max)
-sequence = "ATGCGATCGATCGATC..."  # Your sequence here
-
+sequence = "CTTAATTAATATTGCCTTTGTAATAACGCGCGAAACACAAATCTTCTCTGCCTAATGCAGTAGTCATGTGTTGACTCCTTCAAAATTTCCAAGAAGTTAGTGGCTGGTGTGTCATTGTCTTCATCTTTTTTTTTTTTTTTTTAAAAATTGAATGCGACATGTACTCCTCAACGTATAAGCTCAATGCTTGTTACTGAAACATCTCTTGTCTGATTTTTTCAGGCTAAGTCTTACAGAAAGTGATTGGGCACTTCAATGGCTTTCACAAATGAAAAAGATGGATCTAAGGGATTTGTGAAGAGAGTGGCTTCATCTTTCTCCATGAGGAAGAAGAAGAATGCAACAAGTGAACCCAAGTTGCTTCCAAGATCGAAATCAACAGGTTCTGCTAACTTTGAATCCATGAGGCTACCTGCAACGAAGAAGATTTCAGATGTCACAAACAAAACAAGGATCAAACCATTAGGTGGTGTAGCACCAGCACAACCAAGAAGGGAAAAGATCGATGATCG"
+device = 'cuda:0'
 # Get embeddings
-inputs = tokenizer(sequence, return_tensors="pt", padding=True, truncation=True)
-with torch.no_grad():
-    outputs = model(**inputs)
-    embeddings = outputs.last_hidden_state
+encoding = tokenizer.encode_plus(
+            sequence,
+            return_tensors="pt",
+            return_attention_mask=False,
+            return_token_type_ids=False
+        )
 
-print(f"Sequence length: {len(sequence)}")
+input_ids = encoding["input_ids"].to(device)
+with torch.inference_mode():
+    outputs = model(input_ids=input_ids, output_hidden_states=True)
+
+embeddings = outputs.hidden_states[-1]
 print(f"Embedding shape: {embeddings.shape}")  # [batch_size, seq_len, embedding_dim]
+
+embeddings = embeddings.to(torch.float32).cpu().numpy()
+# Given that PlantCaduceus has bi-directionality and reverse complement equivariance, so the first half of embedding is for forward sequences and the sencond half is for reverse complemented sequences, we need to average the embeddings before working on downstream classifier
+
+hidden_size = embeddings.shape[-1] // 2
+forward = embeddings[..., 0:hidden_size]
+reverse = embeddings[..., hidden_size:]
+reverse = reverse[..., ::-1]
+averaged_embeddings = (forward + reverse) / 2
+print(averaged_embeddings.shape)
 ```
 
 ### Zero-shot mutation effect scoring
