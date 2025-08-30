@@ -10,6 +10,14 @@
   <img src="img/logo.jpg" alt="logo" width="20%">
 </p>
 
+## 🚀 New Release!
+We’re excited to announce [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) 🌱 — our new DNA foundation model for angiosperms.
+
+In addition, we’re also releasing a collection of [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) 🎯, tailored for key downstream tasks including accessible chromatin, gene expression, and protein translation.
+
+👉 Explore the full suite and learn more about PlantCAD2 [here]()
+
+
 ## Table of Contents
 - [PlantCAD overview](#plantcad-overview)
 - [Quick Start](#quick-start)
