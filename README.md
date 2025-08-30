@@ -15,7 +15,7 @@ We’re excited to announce [PlantCAD2](https://huggingface.co/collections/kules
 
 In addition, we’re also releasing a collection of [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) 🎯, tailored for key downstream tasks including accessible chromatin, gene expression, and protein translation.
 
-👉 Explore the full suite and learn more about PlantCAD2 [here]()
+👉 Explore the full suite and learn more about PlantCAD2 [here](docs/PlantCAD2-overview.md)
 
 
 ## Table of Contents
