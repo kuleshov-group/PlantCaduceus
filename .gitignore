@@ -1,0 +1,51 @@
+# Ignored by request
+AGENTS.md
+tmp/
+
+# Python caches and artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build and packaging
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Jupyter/IPython
+.ipynb_checkpoints/
+
+# Tests and coverage
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+.cache/
+
+# Linting and type checking
+.mypy_cache/
+.ruff_cache/
+.pytype/
+.pylint.d/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
