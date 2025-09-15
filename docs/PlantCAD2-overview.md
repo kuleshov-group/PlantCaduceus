@@ -7,7 +7,9 @@
 ## Introduction
 PlantCAD2 builds on the original [PlantCAD](https://doi.org/10.1073/pnas.2421738122) DNA language model, preserving its singlenucleotide tokenization and masked language modeling objective, while introducing four major improvements: architectural efficiency, context length, parameter scale, and phylogenetic breadth.
 
-![img](../img/PlantCAD2-difference.jpg)
+<p align="center">
+  <img src="../img/PlantCAD2-difference.jpg" alt="PlantCAD2 differences" width="60%">
+</p>
 
 ## PlantCAD2 Model summary
 Pre-trained PlantCAD models have been uploaded to [HuggingFace 🤗](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572). Here's the summary of four PlantCAD models with different parameter sizes.
@@ -32,7 +34,7 @@ python ../src/lora_fine_tune.py tokenize \
 python ../src/lora_fine_tune.py tokenize \
     --hf_dataset "plantcad/PlantCAD2_fine_tuning_tasks" \
     --hf_config "cross_species_acr_train_on_arabidopsis" \
-    --hf_split "train" \
+    --hf_split "validation" \
     -output_path "valid.parquet" \
     --model_name "kuleshov-group/PlantCAD2-Small-l24-d0768"
 ```
@@ -98,4 +100,3 @@ python src/lora_fine_tune.py predict \
     --checkpoint_dir "plantcad/cross_species_acr_train_on_arabidopsis_plantcad2_small" --data_dir sorghum.parquet \
     --task_type "classification"
 ```
-
