@@ -29,12 +29,14 @@ python ../src/lora_fine_tune.py tokenize \
     --hf_dataset "plantcad/PlantCAD2_fine_tuning_tasks" \
     --hf_config "cross_species_acr_train_on_arabidopsis" \
     --hf_split "train" \
+    --sequence_length 600 \
     -output_path "train.parquet" \
     --model_name "kuleshov-group/PlantCAD2-Small-l24-d0768"
 python ../src/lora_fine_tune.py tokenize \
     --hf_dataset "plantcad/PlantCAD2_fine_tuning_tasks" \
     --hf_config "cross_species_acr_train_on_arabidopsis" \
     --hf_split "validation" \
+    --sequence_length 600 \
     -output_path "valid.parquet" \
     --model_name "kuleshov-group/PlantCAD2-Small-l24-d0768"
 ```
