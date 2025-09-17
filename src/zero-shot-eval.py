@@ -38,6 +38,7 @@ def _load_model(model_name: str, device: str):
         model = AutoModelForMaskedLM.from_pretrained(
             model_name, trust_remote_code=True, torch_dtype=dtype
         )
+        model.to(dtype)
     except Exception:
         model = AutoModelForMaskedLM.from_pretrained(
             model_name, trust_remote_code=True, torch_dtype=torch.float32
@@ -217,7 +218,7 @@ def _sv_llr_boundary(
                 vals.append(float(np.log(max(m, 1e-12) / max(r, 1e-12))))
             else:
                 vals.append(0.0)
-        scores[i] = float(np.mean(vals))
+        scores[i] = float(np.mean(vals)) * -1
     return scores
 
 
