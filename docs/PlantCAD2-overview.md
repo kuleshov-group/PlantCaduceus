@@ -1,4 +1,4 @@
-[![DOI](https://zenodo.org/badge/DOI/10.1101/2024.06.04.596709.svg)](https://doi.org/10.1073/pnas.2421738122)
+[![PlantCAD2](https://zenodo.org/badge/DOI/10.1101/2025.08.27.672609.svg)](https://doi.org/10.1101/2025.08.27.672609)
 [![Hugging Face](https://img.shields.io/badge/🤗-Hugging%20Face-yellow.svg?style=flat)](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572)
 <a href="https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572">
 <img alt="Hugging Face Downloads" src="https://img.shields.io/badge/dynamic/json?color=blue&label=downloads&query=downloads&url=https://huggingface.co/api/models/kuleshov-group/PlantCAD2-Small-l24-d0768">
