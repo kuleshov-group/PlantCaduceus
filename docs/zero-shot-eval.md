@@ -2,7 +2,6 @@
 
 The `src/zero-shot-eval.py` script provides a unified CLI interface (via Fire) for evaluating PlantCAD2 models on multiple zero‑shot tasks using Hugging Face datasets.
 
-Subcommands: `cons` (aliases: `token_auroc`, `mid`), `motif_acc`, `core_noncore`, `sv_effect`.
 
 ## Common Arguments
 
@@ -10,9 +9,9 @@ All subcommands support these shared parameters:
 
 - `--repo_id`: Hugging Face dataset repository (e.g., `plantcad/PlantCAD2_zero_shot_tasks`)
 - `--task`: HF configuration or subset name (e.g., `tis_recovery`)
-- `--split`: Dataset split to evaluate (e.g., `test_maize`, `valid`)
-- `--model`: HF model identifier (e.g., `kuleshov-group/PlantCAD2-Small-l24-d0768`)
-- `--device`: Compute device (`cuda:0` or `cpu`)
+- `--split`: Dataset split to evaluate (e.g., `test_maize`)
+- `--model`: HF model (e.g., `kuleshov-group/PlantCAD2-Small-l24-d0768`)
+- `--device`: Compute device (`cuda:0`)
 - `--batch_size`: Batch size for inference
 
 ## Available Subcommands
