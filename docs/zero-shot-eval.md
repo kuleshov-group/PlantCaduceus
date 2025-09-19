@@ -82,6 +82,8 @@ python src/zero-shot-eval.py core_noncore \
   --batch_size 16
 ```
 
+CLI tips for `--mask_idx` apply here as well; see motif recovery above.
+
 Requirements: Dataset must contain `sequence` and `label` columns.
 
 **Available Tasks**: (splits: `test_maize`, `test_tomato`):

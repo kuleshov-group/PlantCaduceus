@@ -5,7 +5,7 @@ Zero-shot evaluation utilities for PlantCAD2.
 
 import json
 import logging
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 import fire
 import numpy as np
@@ -19,6 +19,25 @@ from tqdm import tqdm
 
 
 logger = logging.getLogger(__name__)
+
+# Canonical nucleotide ordering and helpers
+NUCLEOTIDES = ("A", "C", "G", "T")
+NUCLEOTIDES_LOWER = tuple(n.lower() for n in NUCLEOTIDES)
+NUCLEOTIDE_TO_INDEX = {b: i for i, b in enumerate(NUCLEOTIDES)}
+
+
+def _require_cuda(device: str) -> str:
+    """Validate that CUDA is available and the requested device is CUDA.
+
+    This script requires a CUDA-capable GPU. CPU execution is not supported to avoid
+    unintended slowdowns or dtype/device mismatches.
+    """
+    if not (torch.cuda.is_available() and device.startswith("cuda")):
+        raise RuntimeError(
+            "CUDA is required for zero-shot evaluation; CPU is not supported. "
+            "Set -device cuda:0 and ensure a CUDA GPU is available."
+        )
+    return device
 
 
 def _optimal_dtype() -> torch.dtype:
@@ -34,15 +53,19 @@ def _optimal_dtype() -> torch.dtype:
 
 def _load_model(model_name: str, device: str):
     dtype = _optimal_dtype()
-    try:
-        model = AutoModelForMaskedLM.from_pretrained(
-            model_name, trust_remote_code=True, torch_dtype=dtype
-        )
-        model.to(dtype)
-    except Exception:
-        model = AutoModelForMaskedLM.from_pretrained(
-            model_name, trust_remote_code=True, torch_dtype=torch.float32
-        )
+    logger.warning(
+        "Loading model with dtype %s (no auto-fallback). Incompatible weights or kernels may error.",
+        dtype,
+    )
+    model = AutoModelForMaskedLM.from_pretrained(
+        model_name, trust_remote_code=True, torch_dtype=dtype
+    )
+    # Note: We set dtype in two places because some transformers versions are inconsistent in
+    # honoring torch_dtype during from_pretrained. See:
+    # https://github.com/huggingface/transformers/issues/36567
+    # Passing torch_dtype here and also calling model.to(dtype) below ensures correctness across
+    # versions; when from_pretrained respects torch_dtype, the subsequent .to(dtype) is a no-op.
+    model.to(dtype)
     tok = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
     model.to(device)
     model.eval()
@@ -104,8 +127,7 @@ class MultiMaskDataset(Dataset):
 
 
 def _masked_probs(model, tokenizer, loader: DataLoader, device: str, desc: str = "Masked logits") -> np.ndarray:
-    nuc = ["a", "c", "g", "t"]
-    idxs = [tokenizer.get_vocab()[n] for n in nuc]
+    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
     all_probs = []
     for batch in tqdm(loader, desc=desc):
         cur_ids = batch["masked_ids"].to(device).squeeze(1)
@@ -127,8 +149,7 @@ def _unmasked_probs(
     desc: str = "Inference (unmasked)",
 ) -> np.ndarray:
     """Per-position probabilities over A,C,G,T for each sequence. Shape: [N, L, 4]."""
-    nuc = list("acgt")
-    idxs = [tokenizer.get_vocab()[n] for n in nuc]
+    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
     seqs = sequences.astype(str).tolist()
     first_len = None
     all_probs = None
@@ -174,7 +195,7 @@ def _sv_llr_boundary(
     Uses mutated base at the mutation index for channel selection.
     Returns per-row scores as a 1D numpy array.
     """
-    base_idx = {"A": 0, "C": 1, "G": 2, "T": 3}
+    base_idx = NUCLEOTIDE_TO_INDEX
     L = ref_probs.shape[1]
     center0 = L // 2
     mut_left0 = list(range(center0 - flanking, center0))
@@ -232,7 +253,7 @@ def _compute_true_tokens_from_seq(sequences: pd.Series, positions: List[int]) ->
 
 def _metric_token_accuracy(probs: np.ndarray, true_tokens: np.ndarray) -> float:
     pred_idx = probs.argmax(axis=1)
-    nuc = np.array(list("ACGT"))
+    nuc = np.array(NUCLEOTIDES)
     pred = nuc[pred_idx]
     valid = np.isin(true_tokens, nuc)
     if not valid.any():
@@ -241,7 +262,7 @@ def _metric_token_accuracy(probs: np.ndarray, true_tokens: np.ndarray) -> float:
 
 
 def _metric_motif_accuracy(probs: np.ndarray, true_tokens: np.ndarray, motif_len: int) -> float:
-    nuc = np.array(list("ACGT"))
+    nuc = np.array(NUCLEOTIDES)
     pred = nuc[probs.argmax(axis=1)]
     n = len(true_tokens)
     assert n % motif_len == 0, "total masked positions not divisible by motif_len"
@@ -257,7 +278,7 @@ def _compute_auroc(df: pd.DataFrame, probs: np.ndarray, token_idx: int, seq_col:
     ref_series = df[seq_col].str[token_idx].str.upper()
     y_true = df["label"].astype(int)
     # Probability of REF base at masked index
-    nuc = ["A", "C", "G", "T"]
+    nuc = list(NUCLEOTIDES)
     ref_map = {b: i for i, b in enumerate(nuc)}
     scores = np.zeros(len(df), dtype=float)
     valid = ref_series.isin(nuc)
@@ -268,7 +289,7 @@ def _compute_auroc(df: pd.DataFrame, probs: np.ndarray, token_idx: int, seq_col:
 
 def _refprob_scores(df: pd.DataFrame, probs: np.ndarray, token_idx: int, seq_col: str) -> np.ndarray:
     ref_series = df[seq_col].str[token_idx].str.upper()
-    nuc = ["A", "C", "G", "T"]
+    nuc = list(NUCLEOTIDES)
     ref_map = {b: i for i, b in enumerate(nuc)}
     scores = np.zeros(len(df), dtype=float)
     valid = ref_series.isin(nuc)
@@ -284,7 +305,7 @@ def _avg_trueprob_scores(
     grouped by motif_len. Returns one score per example.
     Unknown bases (not in A,C,G,T) are counted as 0.
     """
-    nuc = np.array(list("ACGT"))
+    nuc = np.array(NUCLEOTIDES)
     n = len(true_tokens)
     assert n % motif_len == 0, "total masked positions not divisible by motif_len"
     # Map each true token to index in A,C,G,T or -1 if unknown
@@ -325,13 +346,13 @@ class ZeroShotEval:
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
-            dev = device if torch.cuda.is_available() and device.startswith("cuda") else "cpu"
+            dev = _require_cuda(device)
             model_, tok = _load_model(model, dev)
             dataset = SingleMaskDataset(df[seq_column], tok, token_idx)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
             probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits @ {token_idx}")
             if save_logits:
-                pd.DataFrame(probs, columns=["A", "C", "G", "T"]).to_csv(save_logits, sep="\t", index=False)
+                pd.DataFrame(probs, columns=list(NUCLEOTIDES)).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
         # Validate shape: one row per sequence
@@ -355,7 +376,7 @@ class ZeroShotEval:
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
         device: str = "cuda:0",
-        mask_idx: str = "255,256,257",
+        mask_idx: Sequence[int] = (255, 256, 257),
         motif_len: int = 3,
         batch_size: int = 128,
         seq_column: str = "sequence",
@@ -373,25 +394,21 @@ class ZeroShotEval:
         ds = load_dataset(repo_id, task)
         df = ds[split].to_pandas()
 
-        # Accept comma-separated string, list, tuple, or single int
-        if isinstance(mask_idx, (list, tuple)):
-            positions = [int(x) for x in mask_idx]
-        elif isinstance(mask_idx, str):
-            positions = [int(x.strip()) for x in mask_idx.split(",") if x.strip()]
-        else:
-            positions = [int(mask_idx)]
+        # Fire parses sequences when annotated, so this accepts:
+        # --mask-idx=1,2,3  or  --mask-idx="[1,2,3]"  etc.
+        positions = [int(x) for x in mask_idx]
         assert len(positions) == motif_len, "mask_idx count must equal motif_len"
 
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
-            dev = device if torch.cuda.is_available() and device.startswith("cuda") else "cpu"
+            dev = _require_cuda(device)
             model_, tok = _load_model(model, dev)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
             probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits motif_len={motif_len}")
             if save_logits:
-                pd.DataFrame(probs, columns=["A", "C", "G", "T"]).to_csv(save_logits, sep="\t", index=False)
+                pd.DataFrame(probs, columns=list(NUCLEOTIDES)).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
         expected = len(df) * len(positions)
@@ -431,7 +448,7 @@ class ZeroShotEval:
         if missing:
             raise KeyError(f"Missing required columns: {missing}")
 
-        dev = device if torch.cuda.is_available() and device.startswith("cuda") else "cpu"
+        dev = _require_cuda(device)
         model_, tok = _load_model(model, dev)
 
         # Unmasked probabilities
@@ -461,7 +478,7 @@ class ZeroShotEval:
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
         device: str = "cuda:0",
-        mask_idx: str = "255,256,257",
+        mask_idx: Sequence[int] = (255, 256, 257),
         motif_len: int = 3,
         batch_size: int = 128,
         seq_column: str = "sequence",
@@ -481,19 +498,15 @@ class ZeroShotEval:
         ds = load_dataset(repo_id, task)
         df = ds[split].to_pandas()
 
-        # Accept comma-separated string, list, tuple, or single int
-        if isinstance(mask_idx, (list, tuple)):
-            positions = [int(x) for x in mask_idx]
-        elif isinstance(mask_idx, str):
-            positions = [int(x.strip()) for x in mask_idx.split(",") if x.strip()]
-        else:
-            positions = [int(mask_idx)]
+        # Fire parses sequences when annotated, so this accepts:
+        # --mask-idx=1,2,3  or  --mask-idx="[1,2,3]"  etc.
+        positions = [int(x) for x in mask_idx]
         assert len(positions) == motif_len, "mask_idx count must equal motif_len"
 
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
-            dev = device if torch.cuda.is_available() and device.startswith("cuda") else "cpu"
+            dev = _require_cuda(device)
             model_, tok = _load_model(model, dev)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
