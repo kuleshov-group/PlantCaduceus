@@ -1,7 +1,8 @@
 ![Static Badge](https://img.shields.io/badge/Linux-blue?logo=Linux&logoColor=white)
 ![GitHub Repo stars](https://img.shields.io/github/stars/kuleshov-group/PlantCaduceus)
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/kuleshov-group/PlantCaduceus)
-[![DOI](https://zenodo.org/badge/DOI/10.1101/2024.06.04.596709.svg)](https://doi.org/10.1073/pnas.2421738122)
+[![PlantCAD](https://zenodo.org/badge/DOI/10.1073/pnas.2421738122.svg)](https://doi.org/10.1073/pnas.2421738122)
+[![PlantCAD2](https://zenodo.org/badge/DOI/10.1101/2025.08.27.672609.svg)](https://doi.org/10.1101/2025.08.27.672609)
 [![Hugging Face](https://img.shields.io/badge/🤗-Hugging%20Face-yellow.svg?style=flat)](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a)
 <a href="https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a">
   <img alt="Hugging Face Downloads" src="https://img.shields.io/badge/dynamic/json?color=blue&label=downloads&query=downloads&url=https://huggingface.co/api/models/kuleshov-group/PlantCaduceus_l32">
@@ -10,12 +11,15 @@
   <img src="img/logo.jpg" alt="logo" width="20%">
 </p>
 
-## 🚀 New Release!
+## 🚀 PlantCAD2 Release!
 We’re excited to announce [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) 🌱 — our new DNA foundation model for angiosperms.
 
 In addition, we’re also releasing a collection of [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) 🎯, tailored for key downstream tasks including accessible chromatin, gene expression, and protein translation.
 
-👉 Explore the full suite and learn more about PlantCAD2 [here](docs/PlantCAD2-overview.md)
+- Explore the **fine-tuned** PlantCAD2 models [here](docs/PlantCAD2-overview.md)
+
+- Explore the **zero-shot** evaluation of PlantCAD2 models [here](docs/zero-shot-eval.md)
+
 
 
 ## Table of Contents
