@@ -58,7 +58,7 @@ PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on t
 Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a) and [PlantCAD2](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6). 
 Here is the comparison between PlantCAD (v1) and PlantCAD2 models:
 
-| Model | Sequence Length | Model Size | Embedding Size |
+| Model | Max Input Length | Model Size | Embedding Size |
 | :--- | :--- | :--- | :--- |
 | **PlantCAD** | | | |
 | [PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20) | 512bp | 20M | 384 |
@@ -70,7 +70,7 @@ Here is the comparison between PlantCAD (v1) and PlantCAD2 models:
 | [PlantCAD2-Medium](https://huggingface.co/kuleshov-group/PlantCAD2-Medium-l48-d1024) | 8192bp | 311M | 1024 |
 | [PlantCAD2-Large](https://huggingface.co/kuleshov-group/PlantCAD2-Large-l48-d1536) | 8192bp | 694M | 1536 |
 
-*Note: For PlantCAD, the maximum sequence length is 512bp. For PlantCAD2, it is 8,192bp.*
+> **⚠️ Important:** The "Max Input Length" is a hard limit — your input sequences **cannot** exceed this length. The `-contextSize` parameter (see [Zero-shot Scoring](#zero-shot-scoring-of-genomic-variants-and-regions)) must be set to match. Use `-contextSize 512` for PlantCAD models and up to `-contextSize 8192` for PlantCAD2 models.
 
 ## Prerequisites and System Requirements
 
@@ -137,10 +137,39 @@ print(averaged_embeddings.shape)
 
 ### Zero-shot Scoring of Genomic Variants and Regions
 
-The `zero_shot_score.py` script now provides unified functionality to estimate the functional impact of genetic variants or score genomic regions using PlantCAD's log-likelihood scores. It supports two primary modes:
+The `zero_shot_score.py` script provides unified functionality to estimate the functional impact of genetic variants or score genomic regions using PlantCAD's log-likelihood scores. It supports two primary modes:
 
 1.  **Variant Scoring (VCF Input):** Scores specific genetic variants provided in a VCF file.
 2.  **Genome-Wide Region Scoring (BED Input):** Calculates log-likelihood ratios for all positions within specified genomic regions (BED file).
+
+#### Choosing a model and context size
+
+| Scenario | Model | `-contextSize` | GPU Memory* | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| limited GPU | `PlantCaduceus_l32` | `512` | ~2–3 GB | Fast and effective for coding-region variants, but may not be that sensitive to noncoding regions |
+| Coding + noncoding / limited GPU | `PlantCAD2-Small` | `≥ 2048` | ~7–25 GB | Captures longer-range noncoding context on a single consumer GPU |
+| Coding + noncoding / high-end GPU | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Best accuracy for both coding and noncoding regions |
+
+> **🔒 Key rule:** `-contextSize` must **not** exceed the model's max input length (512 for PlantCAD, 8192 for PlantCAD2). The script will extract a window of this size centered on each variant.
+>
+> **⏱️ Note on inference time:** Inference time scales approximately **linearly** with `-contextSize`. For example, doubling the context window roughly doubles the runtime. Choose a context size that balances your accuracy needs with your compute budget. See the [inference speed table](#inference-speed) for detailed benchmarks.
+
+#### Parameter reference
+
+| Parameter | Applies to | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `-input-vcf` | VCF mode | — | Path to input VCF file (mutually exclusive with `-input-bed`) |
+| `-input-bed` | BED mode | — | Path to BED file specifying genomic regions |
+| `-input-fasta` | Both | — | Path to reference genome FASTA (required) |
+| `-output` | Both | — | Path to output file |
+| `-model` | Both | — | HuggingFace model name or local path |
+| `-device` | Both | `cuda:0` | Compute device |
+| `-batchSize` | Both | `128` | Batch size for inference |
+| `-contextSize` | Both | `512` | Context window size in bp. **Must ≤ model's max input length.** For PlantCAD2, increase this (e.g., 2048 or 8192) to leverage the longer context. |
+| `-step-size` | BED only | `1` | Positions scored per window. Larger = faster but less precise ([details](docs/step_size_genome_wide_llr.md)). |
+| `-use-masking` | BED only | `False` | Mask the center position(s) during inference. Recommended only with `-step-size 1`. |
+| `-aggregation` | BED only | `average` | How to aggregate alt-allele scores: `max`, `average`, or `all`. |
+| `-output-raw-prob` | BED only | `False` | Include raw nucleotide probabilities in output. |
 
 ```bash
 # Download example reference genome
@@ -153,15 +182,27 @@ gunzip Zm-B73-REFERENCE-NAM-5.0.fa.gz
 # --- Example: Variant Scoring (VCF Input) ---
 # Estimate impact of specific variants from a VCF file.
 # Note: Only the first 8 columns of the VCF file (CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO) are strictly required.
+# --- Using PlantCAD (v1) with default 512bp context ---
 python src/zero_shot_score.py \
     -input-vcf examples/example_maize_snp.vcf \
     -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
     -output scored_variants.vcf \
     -model 'kuleshov-group/PlantCaduceus_l32' \
     -device 'cuda:0'
+    # -contextSize defaults to 512, matching PlantCAD's max input length
+
+# --- Using PlantCAD2 with a larger context window ---
+python src/zero_shot_score.py \
+    -input-vcf examples/example_maize_snp.vcf \
+    -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
+    -output scored_variants_cad2.vcf \
+    -model 'kuleshov-group/PlantCAD2-Large-l48-d1536' \
+    -contextSize 2048 \
+    -device 'cuda:0'
+    # PlantCAD2 supports up to 8192bp; larger context can improve accuracy
 
 # Expected output for VCF mode:
-# - A new VCF file ('scored_variants.vcf') with PlantCAD scores added to the INFO field.
+# - A new VCF file with PlantCAD scores added to the INFO field.
 # - Scores represent log-likelihood ratios between reference and alternative alleles.
 #   Low negative scores indicate potentially more deleterious mutations.
 ```
@@ -174,6 +215,7 @@ python src/zero_shot_score.py \
 # For demonstration, creating a dummy BED file:
 echo -e "chr1\t1000\t1010\nchr1\t2000\t2015" > examples/example_regions.bed
 
+# --- Using PlantCAD (v1) — default 512bp context ---
 python src/zero_shot_score.py \
     -input-bed examples/example_regions.bed \
     -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
@@ -184,18 +226,25 @@ python src/zero_shot_score.py \
     -aggregation average \
     -use-masking \
     -output-raw-prob
+    # -contextSize defaults to 512 (max for PlantCAD v1)
+
+# --- Using PlantCAD2 with larger context ---
+python src/zero_shot_score.py \
+    -input-bed examples/example_regions.bed \
+    -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
+    -output genome_wide_scores_cad2.tsv \
+    -model 'kuleshov-group/PlantCAD2-Large-l48-d1536' \
+    -contextSize 4096 \
+    -device 'cuda:0' \
+    -step-size 8 \
+    -aggregation average
+    # PlantCAD2 supports up to 8192bp context; step-size 8 gives ~8x speedup
 
 # Expected output for BED mode:
-# - A tab-separated file ('genome_wide_scores.tsv') containing scores for each position.
+# - A tab-separated file containing scores for each position.
 # - Output includes chromosome, start, end, reference allele, aggregated score,
 #   and optionally raw probabilities for all four nucleotides.
-# - `-step-size`: Number of positions to analyze per window, if step size is greater than 1, we recommend turn off masking!!!
-# - `-aggregation`: How to aggregate alternative allele scores.
-#   - `'max'`: Reports the maximum log-likelihood ratio among all three alternative alleles relative to the reference.
-#   - `'average'`: Reports the average log-likelihood ratio across all three alternative alleles relative to the reference.
-#   - `'all'`: Reports the individual log-likelihood ratios for each of the three alternative alleles relative to the reference.
-# - `-use-masking`: Whether to mask the central position(s) during inference.
-# - `-output-raw-prob`: Include raw probabilities in the output.
+# See the parameter reference table above for details on each flag.
 ```
 
 When analyzing the entire genome or large genomic regions, the `-step-size` parameter is very important for speeding up the analysis. For a detailed guide on this trade-off between speed and accuracy, see **[here](docs/step_size_genome_wide_llr.md)**.
@@ -335,10 +384,22 @@ Here are the inference speed benchmark results for PlantCaduceus (v1) and PlantC
 
 
 ### Which model to use? 
-#### Variant Effect Analysis
+#### Variant Effect Analysis (Zero-Shot Scoring)
 
-- **Balanced Performance:** For a good trade-off between speed and accuracy, we recommend using **PlantCaduceus_l32** with a 512bp context window.
-- **Maximum Accuracy:** If computational resources are not a constraint, we recommend using **PlantCAD2-Large** with a context window larger than 1024bp to achieve the best performance.
+| Scenario | Model | `-contextSize` | GPU Memory* | Notes |
+| :--- | :--- | :--- | :--- | :--- |
+| limited GPU | `PlantCaduceus_l32` | `512` | ~2–3 GB | Fast and effective for coding-region variants, but may not be that sensitive to noncoding regions |
+| Coding + noncoding / limited GPU | `PlantCAD2-Small` | `≥ 2048` | ~7–25 GB | Captures longer-range noncoding context on a single consumer GPU |
+| Coding + noncoding / high-end GPU | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Best accuracy for both coding and noncoding regions |
+
+\* Approximate peak memory at batch size 16–64. See the [inference speed table](#inference-speed) for details.
+
+> **How to choose:**
+> - If your analysis primarily targets **coding regions** (e.g., missense variants, splice sites) and you have **limited GPU resources**, `PlantCaduceus_l32` with `-contextSize 512` is a strong baseline — fast and accurate for coding-region variant effects.
+> - If you also care about **noncoding regions** (e.g., promoters, enhancers, intergenic variants) but have **limited GPU memory**, use `PlantCAD2-Small` with `-contextSize` of at least `2048`. The longer context allows the model to capture regulatory signals that a 512bp window would miss.
+> - If you care about **noncoding regions** and have access to a **high-end GPU** (≥ 24 GB), use `PlantCAD2-Large` with `-contextSize` of at least `2048` (ideally `4096` or `8192`) for the best performance.
+>
+> **Note on inference time:** Inference time scales approximately **linearly** with `-contextSize`. For example, doubling the context window roughly doubles the runtime. Choose a context size that balances your accuracy needs with your compute budget.
 
 #### Other Downstream Tasks
 
