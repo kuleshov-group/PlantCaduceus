@@ -144,13 +144,15 @@ The `zero_shot_score.py` script provides unified functionality to estimate the f
 
 #### Choosing a model and context size
 
-| Scenario | Model | `-contextSize` | GPU Memory* | Notes |
+| Scenario | Recommended Model | `-contextSize` | GPU Memory* | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| limited GPU | `PlantCaduceus_l32` | `512` | ~2–3 GB | Fast and effective for coding-region variants, but may not be that sensitive to noncoding regions |
-| Coding + noncoding / limited GPU | `PlantCAD2-Small` | `≥ 2048` | ~7–25 GB | Captures longer-range noncoding context on a single consumer GPU |
-| Coding + noncoding / high-end GPU | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Best accuracy for both coding and noncoding regions |
+| Limited GPU | `PlantCaduceus_l32` | `512` (fixed) | ~2–3 GB | Works well for both coding and noncoding variants. Fast and lightweight. |
+| Higher noncoding sensitivity | `PlantCAD2-Medium` | `≥ 2048` | ~10–34 GB | Longer context improves sensitivity for noncoding regions (promoters, enhancers, etc.). |
+| Best accuracy | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Highest accuracy overall. Use `4096` or `8192` if GPU memory allows. |
 
-> **🔒 Key rule:** `-contextSize` must **not** exceed the model's max input length (512 for PlantCAD, 8192 for PlantCAD2). The script will extract a window of this size centered on each variant.
+> **🔒 Context size rules:**
+> - **PlantCaduceus (v1):** context is always fixed at **512**. The script will override any other value.
+> - **PlantCAD2:** minimum context is **2048**. If you specify a smaller value, the script will automatically raise it to 2048 with a warning. You can set it higher (up to 8192) for better accuracy.
 >
 > **⏱️ Note on inference time:** Inference time scales approximately **linearly** with `-contextSize`. For example, doubling the context window roughly doubles the runtime. Choose a context size that balances your accuracy needs with your compute budget. See the [inference speed table](#inference-speed) for detailed benchmarks.
 
@@ -165,7 +167,7 @@ The `zero_shot_score.py` script provides unified functionality to estimate the f
 | `-model` | Both | — | HuggingFace model name or local path |
 | `-device` | Both | `cuda:0` | Compute device |
 | `-batchSize` | Both | `128` | Batch size for inference |
-| `-contextSize` | Both | `512` | Context window size in bp. **Must ≤ model's max input length.** For PlantCAD2, increase this (e.g., 2048 or 8192) to leverage the longer context. |
+| `-contextSize` | Both | `2048` | Context window size in bp. **Must ≤ model's max input length.** Auto-enforced: PlantCaduceus → 512; PlantCAD2 → min 2048. |
 | `-step-size` | BED only | `1` | Positions scored per window. Larger = faster but less precise ([details](docs/step_size_genome_wide_llr.md)). |
 | `-use-masking` | BED only | `False` | Mask the center position(s) during inference. Recommended only with `-step-size 1`. |
 | `-aggregation` | BED only | `average` | How to aggregate alt-allele scores: `max`, `average`, or `all`. |
@@ -386,20 +388,20 @@ Here are the inference speed benchmark results for PlantCaduceus (v1) and PlantC
 ### Which model to use? 
 #### Variant Effect Analysis (Zero-Shot Scoring)
 
-| Scenario | Model | `-contextSize` | GPU Memory* | Notes |
+| Scenario | Recommended Model | `-contextSize` | GPU Memory* | Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| limited GPU | `PlantCaduceus_l32` | `512` | ~2–3 GB | Fast and effective for coding-region variants, but may not be that sensitive to noncoding regions |
-| Coding + noncoding / limited GPU | `PlantCAD2-Small` | `≥ 2048` | ~7–25 GB | Captures longer-range noncoding context on a single consumer GPU |
-| Coding + noncoding / high-end GPU | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Best accuracy for both coding and noncoding regions |
+| Limited GPU | `PlantCaduceus_l32` | `512` (fixed) | ~2–3 GB | Works well for both coding and noncoding variants. Fast and lightweight. |
+| Higher noncoding sensitivity | `PlantCAD2-Medium` | `≥ 2048` | ~10–34 GB | Longer context improves sensitivity for noncoding regions (promoters, enhancers, etc.). |
+| Best accuracy | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Highest accuracy overall. Use `4096` or `8192` if GPU memory allows. |
 
 \* Approximate peak memory at batch size 16–64. See the [inference speed table](#inference-speed) for details.
 
 > **How to choose:**
-> - If your analysis primarily targets **coding regions** (e.g., missense variants, splice sites) and you have **limited GPU resources**, `PlantCaduceus_l32` with `-contextSize 512` is a strong baseline — fast and accurate for coding-region variant effects.
-> - If you also care about **noncoding regions** (e.g., promoters, enhancers, intergenic variants) but have **limited GPU memory**, use `PlantCAD2-Small` with `-contextSize` of at least `2048`. The longer context allows the model to capture regulatory signals that a 512bp window would miss.
-> - If you care about **noncoding regions** and have access to a **high-end GPU** (≥ 24 GB), use `PlantCAD2-Large` with `-contextSize` of at least `2048` (ideally `4096` or `8192`) for the best performance.
+> - `PlantCaduceus_l32` with `-contextSize 512` is a strong baseline that works well for both **coding and noncoding** variants, and is fast and lightweight.
+> - If you want **higher sensitivity for noncoding regions** (e.g., promoters, enhancers, intergenic variants), use `PlantCAD2-Medium` or `PlantCAD2-Large` with `-contextSize` of at least `2048`. The longer context window helps capture longer-range regulatory signals.
+> - For the **best overall accuracy**, use `PlantCAD2-Large` with `-contextSize` of `4096` or `8192` if your GPU memory allows.
 >
-> **Note on inference time:** Inference time scales approximately **linearly** with `-contextSize`. For example, doubling the context window roughly doubles the runtime. Choose a context size that balances your accuracy needs with your compute budget.
+> **Note:** The script automatically enforces context size constraints — PlantCaduceus is fixed at 512, and PlantCAD2 has a minimum of 2048. You do not need to worry about setting an invalid context size.
 
 #### Other Downstream Tasks
 
