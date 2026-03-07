@@ -77,7 +77,7 @@ WANDB_PROJECT=PlantCAD2 torchrun --nproc_per_node=2 src/HF_pre_train.py \
     --lr_scheduler_type constant_with_warmup \
     --run_name test \
     --overwrite_output_dir \
-    --output_dir "PlantCaduceus_train_1" \
+    --output_dir "PlantCAD2_train_1" \
     --per_device_train_batch_size 1 \
     --per_device_eval_batch_size 1 \
     --gradient_accumulation_steps 4 \
