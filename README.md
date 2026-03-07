@@ -12,15 +12,9 @@
   <img src="img/logo.jpg" alt="logo" width="20%">
 </p>
 
-## [🚀 PlantCAD2 Release!](https://www.biorxiv.org/content/10.1101/2025.08.27.672609v1)
+## 🚀 [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) is here! ([paper](https://www.biorxiv.org/content/10.1101/2025.08.27.672609v3))
 
-We're excited to announce [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) 🌱 — our new DNA foundation model for angiosperms.
-
-In addition, we're also releasing a collection of [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) 🎯, tailored for key downstream tasks including accessible chromatin, gene expression, and protein translation.
-
-- Explore the **fine-tuned** PlantCAD2 models [here](docs/PlantCAD2-overview.md)
-- Explore the **zero-shot** evaluation of PlantCAD2 models [here](docs/zero-shot-eval.md)
-- Explore the post-training or pre-training of PlantCAD2 [here](https://github.com/kuleshov-group/PlantCaduceus/issues/19)
+A new DNA foundation model for angiosperms, with [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) for accessible chromatin, gene expression, and protein translation.
 
 ## Table of Contents
 
@@ -112,6 +106,8 @@ See `notebooks/examples.ipynb` for more detailed examples.
 | **[Zero-shot SV Scoring](docs/zero-shot-scoring-sv.md)** | Score structural variants (deletions & insertions) |
 | **[XGBoost Classifiers](docs/xgboost-classifiers.md)** | Train or use pre-trained classifiers for TIS, TTS, splice sites |
 | **[In-silico Mutagenesis](pipelines/in-silico-mutagenesis/README.md)** | Large-scale simulation and analysis of genetic variants |
+| **[Fine-tuned PlantCAD2 Models](docs/PlantCAD2-overview.md)** | LoRA models for chromatin, expression, translation |
+| **[Zero-shot Evaluation](docs/zero-shot-eval.md)** | PlantCAD2 zero-shot benchmark results |
 | **[Pre-training](docs/pre-training.md)** | Pre-train or fine-tune PlantCAD models from scratch |
 | **[Model Recommendations](docs/model-recommendations.md)** | Which model to use, inference speed benchmarks, GPU memory guide |
 
