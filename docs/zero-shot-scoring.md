@@ -91,12 +91,13 @@ python src/zero_shot_score.py \
     -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
     -output genome_wide_scores.tsv \
     -model 'kuleshov-group/PlantCaduceus_l32' \
+    -contextSize 512 \
     -device 'cuda:0' \
     -step-size 1 \
     -aggregation average \
     -use-masking \
     -output-raw-prob
-    # -contextSize defaults to 512 (max for PlantCAD v1)
+    # Explicitly set -contextSize 512 (max for PlantCaduceus v1; script enforces this)
 
 # Using PlantCAD2 with larger context
 python src/zero_shot_score.py \
