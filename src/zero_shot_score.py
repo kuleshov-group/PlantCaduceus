@@ -450,7 +450,7 @@ def main():
         FIXED_CTX = 512
         if args.contextSize != FIXED_CTX:
             logging.warning(
-                f"PlantCAD model detected. Forcing contextSize={FIXED_CTX} "
+                f"PlantCaduceus (PlantCAD v1) model detected. Forcing contextSize={FIXED_CTX} "
                 f"(was {args.contextSize})."
             )
             args.contextSize = FIXED_CTX
