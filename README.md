@@ -117,3 +117,10 @@ If you find PlantCAD useful for your research, please consider citing our paper:
 
 - Zhai, J., Gokaslan, A., Schiff, Y., Berthel, A., Liu, Z. Y., Lai, W. L., Miller, Z. R., Scheben, A., Stitzer, M. C., Romay, M. C., Buckler, E. S., & Kuleshov, V. (2025). Cross-species modeling of plant genomes at single nucleotide resolution using a pretrained DNA language model. Proceedings of the National Academy of Sciences, 122(24), e2421738122. https://doi.org/10.1073/pnas.2421738122
 - Zhai J., Gokaslan A., Hsu SK., Chen SP., Liu ZY., Marroquin E., Czech E., Cannon B., Berthel A., Romay MC., Pennell M., Kuleshov V.* Buckler ES*. PlantCAD2: A Long-Context DNA Language Model for Cross-Species Functional Annotation in Angiosperms. bioRxiv. 2025. Nov 19. doi: https://doi.org/10.1101/2025.08.27.672609
+
+## Contact
+
+Maintained by **Jingjing Zhai**.
+
+- For collaboration inquiries: [jz963@cornell.edu](mailto:jz963@cornell.edu) or [zhaijingjing603@gmail.com](mailto:zhaijingjing603@gmail.com)
+- General questions, bug reports, and feature requests: please [open an issue](https://github.com/plantcad/plantcad/issues)
