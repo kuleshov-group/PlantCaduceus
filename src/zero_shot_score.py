@@ -27,8 +27,10 @@ def parse_args():
     parser.add_argument("-model", dest="model", required=True, help="The directory of pre-trained model.")
     parser.add_argument("-device", dest="device", default="cuda:0", help="The device to run the model (default: cuda:0).")
     parser.add_argument("-batchSize", dest="batchSize", default=128, type=int, help="The batch size for the model (default: 128).")
-    parser.add_argument("-contextSize", dest="contextSize", default=512, type=int,
-                        help="The context window size (default: 512).")
+    parser.add_argument("-contextSize", dest="contextSize", default=2048, type=int,
+                        help="The context window size (default: 2048). "
+                             "PlantCAD2 models enforce a minimum of 2048; "
+                             "PlantCaduceus models are fixed at 512.")
     
     # Arguments for genome-wide (BED) mode
     bed_group = parser.add_argument_group('BED Mode Options', 'These options are only for use with --input-bed')
@@ -432,6 +434,27 @@ def main():
         datefmt='%Y-%m-%d %H:%M:%S'
     )
     args = parse_args()
+
+    # ----- Enforce model-specific context size constraints -----
+    model_name_lower = args.model.lower()
+    if "plantcad2" in model_name_lower:
+        MIN_CTX = 2048
+        if args.contextSize < MIN_CTX:
+            logging.warning(
+                f"PlantCAD2 model detected. Specified contextSize={args.contextSize} is below "
+                f"the recommended minimum of {MIN_CTX}. Forcing contextSize={MIN_CTX}."
+            )
+            args.contextSize = MIN_CTX
+            args.tokenIdx = args.contextSize // 2 - 1
+    elif "plantcaduceus" in model_name_lower:
+        FIXED_CTX = 512
+        if args.contextSize != FIXED_CTX:
+            logging.warning(
+                f"PlantCAD model detected. Forcing contextSize={FIXED_CTX} "
+                f"(was {args.contextSize})."
+            )
+            args.contextSize = FIXED_CTX
+            args.tokenIdx = args.contextSize // 2 - 1
 
     # Determine workflow based on input type
     if args.inputVCF is not None:
