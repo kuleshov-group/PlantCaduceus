@@ -13,17 +13,17 @@
 </p>
 
 ## [🚀 PlantCAD2 Release!](https://www.biorxiv.org/content/10.1101/2025.08.27.672609v1)
+
 We’re excited to announce [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) 🌱 — our new DNA foundation model for angiosperms.
 
 In addition, we’re also releasing a collection of [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) 🎯, tailored for key downstream tasks including accessible chromatin, gene expression, and protein translation.
 
 - Explore the **fine-tuned** PlantCAD2 models [here](docs/PlantCAD2-overview.md)
-
 - Explore the **zero-shot** evaluation of PlantCAD2 models [here](docs/zero-shot-eval.md)
-
 - Explore the post-training or pre-training of PlantCAD2 [here](https://github.com/kuleshov-group/PlantCaduceus/issues/19)
 
 ## Table of Contents
+
 - [PlantCAD overview](#plantcad-overview)
 - [Quick Start](#quick-start)
 - [Model summary](#model-summary)
@@ -56,20 +56,21 @@ PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on t
 **For local usage:** See installation instructions [here](docs/local-install.md), then use `notebooks/examples.ipynb` to get started.
 
 ## Model summary
-Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a) and [PlantCAD2](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6). 
+
+Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a) and [PlantCAD2](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6).
 Here is the comparison between PlantCAD (v1) and PlantCAD2 models:
 
-| Model | Max Input Length | Model Size | Embedding Size |
-| :--- | :--- | :--- | :--- |
-| **PlantCAD** | | | |
-| [PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20) | 512bp | 20M | 384 |
-| [PlantCaduceus_l24](https://huggingface.co/kuleshov-group/PlantCaduceus_l24) | 512bp | 40M | 512 |
-| [PlantCaduceus_l28](https://huggingface.co/kuleshov-group/PlantCaduceus_l28) | 512bp | 128M | 768 |
-| [PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32) | 512bp | 225M | 1024 |
-| **PlantCAD2** | | | |
-| [PlantCAD2-Small](https://huggingface.co/kuleshov-group/PlantCAD2-Small-l24-d0768) | 8192bp | 88M | 768 |
-| [PlantCAD2-Medium](https://huggingface.co/kuleshov-group/PlantCAD2-Medium-l48-d1024) | 8192bp | 311M | 1024 |
-| [PlantCAD2-Large](https://huggingface.co/kuleshov-group/PlantCAD2-Large-l48-d1536) | 8192bp | 694M | 1536 |
+| Model                                                                             | Max Input Length | Model Size | Embedding Size |
+| :-------------------------------------------------------------------------------- | :--------------- | :--------- | :------------- |
+| **PlantCAD**                                                                |                  |            |                |
+| [PlantCaduceus_l20](https://huggingface.co/kuleshov-group/PlantCaduceus_l20)         | 512bp            | 20M        | 384            |
+| [PlantCaduceus_l24](https://huggingface.co/kuleshov-group/PlantCaduceus_l24)         | 512bp            | 40M        | 512            |
+| [PlantCaduceus_l28](https://huggingface.co/kuleshov-group/PlantCaduceus_l28)         | 512bp            | 128M       | 768            |
+| [PlantCaduceus_l32](https://huggingface.co/kuleshov-group/PlantCaduceus_l32)         | 512bp            | 225M       | 1024           |
+| **PlantCAD2**                                                               |                  |            |                |
+| [PlantCAD2-Small](https://huggingface.co/kuleshov-group/PlantCAD2-Small-l24-d0768)   | 8192bp           | 88M        | 768            |
+| [PlantCAD2-Medium](https://huggingface.co/kuleshov-group/PlantCAD2-Medium-l48-d1024) | 8192bp           | 311M       | 1024           |
+| [PlantCAD2-Large](https://huggingface.co/kuleshov-group/PlantCAD2-Large-l48-d1536)   | 8192bp           | 694M       | 1536           |
 
 > **⚠️ Important:** The "Max Input Length" is a hard limit — your input sequences **cannot** exceed this length. The `-contextSize` parameter (see [Zero-shot Scoring](#zero-shot-scoring-of-genomic-variants-and-regions)) must be set to match. Use `-contextSize 512` for PlantCAD models and up to `-contextSize 8192` for PlantCAD2 models.
 
@@ -82,11 +83,12 @@ Here is the comparison between PlantCAD (v1) and PlantCAD2 models:
 ## Installation
 
 ### Option 1: Google Colab (Recommended for beginners)
+
 **No installation required!** Just open our [PlantCAD Google Colab notebook](https://colab.research.google.com/drive/1QW9Lgwra0vHQAOICE2hsIVcp6DKClyhO?usp=sharing) and start analyzing your data.
 
 ### Option 2: Local installation
-See our [Local Installation Guide](docs/local-install.md).
 
+See our [Local Installation Guide](docs/local-install.md).
 
 ## Basic Usage
 
@@ -95,6 +97,7 @@ See our [Local Installation Guide](docs/local-install.md).
 The easiest way to start is with our example notebook: `notebooks/examples.ipynb`
 
 **Quick example - Get sequence embeddings:**
+
 ```python
 import torch
 from mamba_ssm import Mamba
@@ -135,23 +138,23 @@ averaged_embeddings = (forward + reverse) / 2
 print(averaged_embeddings.shape)
 ```
 
-
 ### Zero-shot Scoring of SNPs and Genomic Regions
 
 The `zero_shot_score.py` script scores single-nucleotide polymorphisms (SNPs) or entire genomic regions using PlantCAD's log-likelihood ratios. It supports two primary modes:
 
-1.  **Variant Scoring (VCF Input):** Scores specific genetic variants provided in a VCF file.
-2.  **Genome-Wide Region Scoring (BED Input):** Calculates log-likelihood ratios for all positions within specified genomic regions (BED file).
+1. **Variant Scoring (VCF Input):** Scores specific genetic variants provided in a VCF file.
+2. **Genome-Wide Region Scoring (BED Input):** Calculates log-likelihood ratios for all positions within specified genomic regions (BED file).
 
 #### Choosing a model and context size
 
-| Scenario | Recommended Model | `-contextSize` | GPU Memory* | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| Limited GPU | `PlantCaduceus_l32` | `512` (fixed) | ~2–3 GB | Works well for both coding and noncoding variants. Fast and lightweight. |
-| Higher noncoding sensitivity | `PlantCAD2-Medium` | `≥ 2048` | ~10–34 GB | Longer context improves sensitivity for noncoding regions (promoters, enhancers, etc.). |
-| Best accuracy | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Highest accuracy overall. Use `4096` or `8192` if GPU memory allows. |
+| Scenario                     | Recommended Model     | `-contextSize` | GPU Memory* | Notes                                                                                   |
+| :--------------------------- | :-------------------- | :--------------- | :---------- | :-------------------------------------------------------------------------------------- |
+| Limited GPU                  | `PlantCaduceus_l32` | `512` (fixed)  | ~2–3 GB    | Works well for both coding and noncoding variants. Fast and lightweight.                |
+| Higher noncoding sensitivity | `PlantCAD2-Medium`  | `≥ 2048`      | ~10–34 GB  | Longer context improves sensitivity for noncoding regions (promoters, enhancers, etc.). |
+| Best accuracy                | `PlantCAD2-Large`   | `≥ 2048`      | ~15–51 GB  | Highest accuracy overall. Use `4096` or `8192` if GPU memory allows.                |
 
 > **🔒 Context size rules:**
+>
 > - **PlantCaduceus (v1):** context is always fixed at **512**. The script will override any other value.
 > - **PlantCAD2:** minimum context is **2048**. If you specify a smaller value, the script will automatically raise it to 2048 with a warning. You can set it higher (up to 8192) for better accuracy.
 >
@@ -159,20 +162,20 @@ The `zero_shot_score.py` script scores single-nucleotide polymorphisms (SNPs) or
 
 #### Parameter reference
 
-| Parameter | Applies to | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `-input-vcf` | VCF mode | — | Path to input VCF file (mutually exclusive with `-input-bed`) |
-| `-input-bed` | BED mode | — | Path to BED file specifying genomic regions |
-| `-input-fasta` | Both | — | Path to reference genome FASTA (required) |
-| `-output` | Both | — | Path to output file |
-| `-model` | Both | — | HuggingFace model name or local path |
-| `-device` | Both | `cuda:0` | Compute device |
-| `-batchSize` | Both | `128` | Batch size for inference |
-| `-contextSize` | Both | `2048` | Context window size in bp. **Must ≤ model's max input length.** Auto-enforced: PlantCaduceus → 512; PlantCAD2 → min 2048. |
-| `-step-size` | BED only | `1` | Positions scored per window. Larger = faster but less precise ([details](docs/step_size_genome_wide_llr.md)). |
-| `-use-masking` | BED only | `False` | Mask the center position(s) during inference. Recommended only with `-step-size 1`. |
-| `-aggregation` | BED only | `average` | How to aggregate alt-allele scores: `max`, `average`, or `all`. |
-| `-output-raw-prob` | BED only | `False` | Include raw nucleotide probabilities in output. |
+| Parameter            | Applies to | Default     | Description                                                                                                                       |
+| :------------------- | :--------- | :---------- | :-------------------------------------------------------------------------------------------------------------------------------- |
+| `-input-vcf`       | VCF mode   | —          | Path to input VCF file (mutually exclusive with `-input-bed`)                                                                   |
+| `-input-bed`       | BED mode   | —          | Path to BED file specifying genomic regions                                                                                       |
+| `-input-fasta`     | Both       | —          | Path to reference genome FASTA (required)                                                                                         |
+| `-output`          | Both       | —          | Path to output file                                                                                                               |
+| `-model`           | Both       | —          | HuggingFace model name or local path                                                                                              |
+| `-device`          | Both       | `cuda:0`  | Compute device                                                                                                                    |
+| `-batchSize`       | Both       | `128`     | Batch size for inference                                                                                                          |
+| `-contextSize`     | Both       | `2048`    | Context window size in bp.**Must ≤ model's max input length.** Auto-enforced: PlantCaduceus → 512; PlantCAD2 → min 2048. |
+| `-step-size`       | BED only   | `1`       | Positions scored per window. Larger = faster but less precise ([details](docs/step_size_genome_wide_llr.md)).                        |
+| `-use-masking`     | BED only   | `False`   | Mask the center position(s) during inference. Recommended only with `-step-size 1`.                                             |
+| `-aggregation`     | BED only   | `average` | How to aggregate alt-allele scores:`max`, `average`, or `all`.                                                              |
+| `-output-raw-prob` | BED only   | `False`   | Include raw nucleotide probabilities in output.                                                                                   |
 
 ```bash
 # Download example reference genome
@@ -252,7 +255,6 @@ python src/zero_shot_score.py \
 
 When analyzing the entire genome or large genomic regions, the `-step-size` parameter is very important for speeding up the analysis. For a detailed guide on this trade-off between speed and accuracy, see **[here](docs/step_size_genome_wide_llr.md)**.
 
-
 ### Zero-shot Scoring of Structural Variants
 
 The `zero_shot_score_sv.py` script scores structural variants (deletions and insertions) by comparing the model's predicted nucleotide probabilities at the SV junction flanks between the reference and mutant sequences.
@@ -266,16 +268,16 @@ The `zero_shot_score_sv.py` script scores structural variants (deletions and ins
 
 #### Parameter reference
 
-| Parameter | Default | Description |
-| :--- | :--- | :--- |
-| `-input-vcf` | — | Input VCF file containing SVs (deletions and/or insertions). |
-| `-input-fasta` | — | Reference genome FASTA file (required). |
-| `-output` | — | Output VCF file with `PlantCAD_SV_Score` in the INFO field. |
-| `-model` | — | HuggingFace model name or local path. |
-| `-device` | `cuda:0` | Compute device. |
-| `-batchSize` | `32` | Batch size for inference. |
-| `-contextSize` | `8192` | Context window size in bp. Should match the model's max input length. |
-| `-flank-size` | `5` | Number of bases on each side of the SV junction to score. |
+| Parameter        | Default    | Description                                                                                          |
+| :--------------- | :--------- | :--------------------------------------------------------------------------------------------------- |
+| `-input-vcf`   | —         | Input VCF file containing SVs (deletions and/or insertions).                                         |
+| `-input-fasta` | —         | Reference genome FASTA file (required).                                                              |
+| `-output`      | —         | Output VCF file with `PlantCAD_SV_Score` in the INFO field.                                        |
+| `-model`       | —         | HuggingFace model name or local path.                                                                |
+| `-device`      | `cuda:0` | Compute device.                                                                                      |
+| `-batchSize`   | `32`     | Batch size for inference.                                                                            |
+| `-contextSize` | `8192`   | Context window size in bp. **Can be shorter, but SVs longer than half this value will be skipped.** |
+| `-flank-size`  | `5`      | Number of bases on each side of the SV junction to score.                                            |
 
 #### Example usage
 
@@ -297,11 +299,9 @@ python src/zero_shot_score_sv.py \
 
 > **Note:** SVs whose length exceeds `contextSize / 2 - flank-size` are automatically skipped, as the context window cannot adequately capture both flanks. Use a larger `-contextSize` (up to `8192` for PlantCAD2) when scoring large SVs.
 
-
 ### In-silico mutagenesis pipeline
 
 For large-scale simulation and analysis of genetic variants, we provide a comprehensive in-silico mutagenesis pipeline. See [pipelines/in-silico-mutagenesis/README.md](pipelines/in-silico-mutagenesis/README.md) for detailed instructions.
-
 
 ## Advanced Usage
 
@@ -324,6 +324,7 @@ python src/train_XGBoost.py \
 ```
 
 **Expected outputs:**
+
 - Trained XGBoost classifier (`.json` file)
 - Performance metrics on validation/test sets
 - Feature importance analysis
@@ -333,8 +334,9 @@ python src/train_XGBoost.py \
 We provide pre-trained XGBoost classifiers for common annotation tasks in the [`classifiers`](classifiers) directory.
 
 **Available classifiers:**
+
 - TIS (Translation Initiation Sites)
-- TTS (Translation Termination Sites)  
+- TTS (Translation Termination Sites)
 - Splice donor/acceptor sites
 
 ```bash
@@ -355,11 +357,13 @@ python src/predict_XGBoost.py \
 For advanced users who want to pre-train PlantCAD or PlantCAD2 models from scratch or fine-tune on custom datasets.
 
 **Requirements:**
+
 - Large computational resources (multi-GPU recommended)
 - WandB account for experiment tracking
 - Custom genomic dataset in HuggingFace format
 
 **Basic pre-training command:**
+
 ```bash
 WANDB_PROJECT=PlantCAD python src/HF_pre_train.py \
     --do_train \
@@ -396,53 +400,56 @@ WANDB_PROJECT=PlantCAD python src/HF_pre_train.py \
 ```
 
 **Key parameters:**
+
 - `dataset_name`: Your custom dataset or use our Angiosperm dataset
 - `max_steps`: Total training steps (adjust based on dataset size)
 - `learning_rate`: 2E-4 works well for most cases
 - `Batch sizes`: Adjust based on your GPU memory
 
 ## Model Recommendations
+
 ### Inference speed
 
 Here are the inference speed benchmark results for PlantCaduceus (v1) and PlantCAD2 models:
 
-| Model | Seq Len | Batch | Peak memory (GB) | Seq/s | Tokens/s |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| PlantCaduceus_l20 | 512 | 16 | 0.31 | 400.28 | 204,942 |
-| PlantCaduceus_l20 | 512 | 32 | 0.56 | 640.86 | 328,118 |
-| PlantCaduceus_l20 | 512 | 64 | 1.01 | 663.04 | 339,475 |
-| PlantCaduceus_l24 | 512 | 16 | 0.43 | 335.88 | 171,970 |
-| PlantCaduceus_l24 | 512 | 32 | 0.75 | 392.83 | 201,140 |
-| PlantCaduceus_l24 | 512 | 64 | 1.37 | 407.38 | 208,577 |
-| PlantCaduceus_l28 | 512 | 16 | 0.77 | 207.61 | 106,295 |
-| PlantCaduceus_l28 | 512 | 32 | 1.27 | 213.99 | 109,563 |
-| PlantCaduceus_l28 | 512 | 64 | 2.22 | 219.97 | 112,626 |
-| PlantCaduceus_l32 | 512 | 16 | 1.1 | 130.56 | 66,848 |
-| PlantCaduceus_l32 | 512 | 32 | 1.71 | 132.62 | 67,902 |
-| PlantCaduceus_l32 | 512 | 64 | 2.97 | 135.05 | 69,144 |
-| PlantCAD2-Small | 8192 | 16 | 6.56 | 19.61 | 160,653 |
-| PlantCAD2-Small | 8192 | 32 | 12.76 | 19.26 | 157,767 |
-| PlantCAD2-Small | 8192 | 64 | 24.89 | 19 | 155,649 |
-| PlantCAD2-Medium | 8192 | 16 | 9.62 | 6.88 | 56,386 |
-| PlantCAD2-Medium | 8192 | 32 | 17.62 | 6.76 | 55,342 |
-| PlantCAD2-Medium | 8192 | 64 | 33.62 | 6.79 | 55,636 |
-| PlantCAD2-Large | 8192 | 16 | 14.89 | 3.92 | 32,111 |
-| PlantCAD2-Large | 8192 | 32 | 26.95 | 3.87 | 31,741 |
-| PlantCAD2-Large | 8192 | 64 | 51.09 | 3.89 | 31,833 |
+| Model             | Seq Len | Batch | Peak memory (GB) | Seq/s  | Tokens/s |
+| :---------------- | :------ | :---- | :--------------- | :----- | :------- |
+| PlantCaduceus_l20 | 512     | 16    | 0.31             | 400.28 | 204,942  |
+| PlantCaduceus_l20 | 512     | 32    | 0.56             | 640.86 | 328,118  |
+| PlantCaduceus_l20 | 512     | 64    | 1.01             | 663.04 | 339,475  |
+| PlantCaduceus_l24 | 512     | 16    | 0.43             | 335.88 | 171,970  |
+| PlantCaduceus_l24 | 512     | 32    | 0.75             | 392.83 | 201,140  |
+| PlantCaduceus_l24 | 512     | 64    | 1.37             | 407.38 | 208,577  |
+| PlantCaduceus_l28 | 512     | 16    | 0.77             | 207.61 | 106,295  |
+| PlantCaduceus_l28 | 512     | 32    | 1.27             | 213.99 | 109,563  |
+| PlantCaduceus_l28 | 512     | 64    | 2.22             | 219.97 | 112,626  |
+| PlantCaduceus_l32 | 512     | 16    | 1.1              | 130.56 | 66,848   |
+| PlantCaduceus_l32 | 512     | 32    | 1.71             | 132.62 | 67,902   |
+| PlantCaduceus_l32 | 512     | 64    | 2.97             | 135.05 | 69,144   |
+| PlantCAD2-Small   | 8192    | 16    | 6.56             | 19.61  | 160,653  |
+| PlantCAD2-Small   | 8192    | 32    | 12.76            | 19.26  | 157,767  |
+| PlantCAD2-Small   | 8192    | 64    | 24.89            | 19     | 155,649  |
+| PlantCAD2-Medium  | 8192    | 16    | 9.62             | 6.88   | 56,386   |
+| PlantCAD2-Medium  | 8192    | 32    | 17.62            | 6.76   | 55,342   |
+| PlantCAD2-Medium  | 8192    | 64    | 33.62            | 6.79   | 55,636   |
+| PlantCAD2-Large   | 8192    | 16    | 14.89            | 3.92   | 32,111   |
+| PlantCAD2-Large   | 8192    | 32    | 26.95            | 3.87   | 31,741   |
+| PlantCAD2-Large   | 8192    | 64    | 51.09            | 3.89   | 31,833   |
 
+### Which model to use?
 
-### Which model to use? 
 #### Variant Effect Analysis (Zero-Shot Scoring)
 
-| Scenario | Recommended Model | `-contextSize` | GPU Memory* | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| Limited GPU | `PlantCaduceus_l32` | `512` (fixed) | ~2–3 GB | Works well for both coding and noncoding variants. Fast and lightweight. |
-| Higher noncoding sensitivity | `PlantCAD2-Medium` | `≥ 2048` | ~10–34 GB | Longer context improves sensitivity for noncoding regions (promoters, enhancers, etc.). |
-| Best accuracy | `PlantCAD2-Large` | `≥ 2048` | ~15–51 GB | Highest accuracy overall. Use `4096` or `8192` if GPU memory allows. |
+| Scenario                     | Recommended Model     | `-contextSize` | GPU Memory* | Notes                                                                                   |
+| :--------------------------- | :-------------------- | :--------------- | :---------- | :-------------------------------------------------------------------------------------- |
+| Limited GPU                  | `PlantCaduceus_l32` | `512` (fixed)  | ~2–3 GB    | Works well for both coding and noncoding variants. Fast and lightweight.                |
+| Higher noncoding sensitivity | `PlantCAD2-Medium`  | `≥ 2048`      | ~10–34 GB  | Longer context improves sensitivity for noncoding regions (promoters, enhancers, etc.). |
+| Best accuracy                | `PlantCAD2-Large`   | `≥ 2048`      | ~15–51 GB  | Highest accuracy overall. Use `4096` or `8192` if GPU memory allows.                |
 
 \* Approximate peak memory at batch size 16–64. See the [inference speed table](#inference-speed) for details.
 
 > **How to choose:**
+>
 > - `PlantCaduceus_l32` with `-contextSize 512` is a strong baseline that works well for both **coding and noncoding** variants, and is fast and lightweight.
 > - If you want **higher sensitivity for noncoding regions** (e.g., promoters, enhancers, intergenic variants), use `PlantCAD2-Medium` or `PlantCAD2-Large` with `-contextSize` of at least `2048`. The longer context window helps capture longer-range regulatory signals.
 > - For the **best overall accuracy**, use `PlantCAD2-Large` with `-contextSize` of `4096` or `8192` if your GPU memory allows.
