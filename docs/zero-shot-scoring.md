@@ -53,14 +53,15 @@ gunzip Zm-B73-REFERENCE-NAM-5.0.fa.gz
 Estimate impact of specific variants from a VCF file. Only the first 8 columns of the VCF file (CHROM, POS, ID, REF, ALT, QUAL, FILTER, INFO) are strictly required.
 
 ```bash
-# Using PlantCAD (v1) with default 512bp context
+# Using PlantCAD (v1), which requires a fixed 512bp context
 python src/zero_shot_score.py \
     -input-vcf examples/example_maize_snp.vcf \
     -input-fasta Zm-B73-REFERENCE-NAM-5.0.fa \
     -output scored_variants.vcf \
     -model 'kuleshov-group/PlantCaduceus_l32' \
+    -contextSize 512 \
     -device 'cuda:0'
-    # -contextSize defaults to 512, matching PlantCAD's max input length
+    # PlantCaduceus (PlantCAD v1) forces contextSize=512 regardless of the default (2048)
 
 # Using PlantCAD2 with a larger context window
 python src/zero_shot_score.py \
