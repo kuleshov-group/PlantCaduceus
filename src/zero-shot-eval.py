@@ -60,7 +60,7 @@ def _load_model(model_name: str):
         dtype,
     )
     model = AutoModelForMaskedLM.from_pretrained(
-        model_name, trust_remote_code=True, torch_dtype=dtype, device_map="auto"
+        model_name, trust_remote_code=True, torch_dtype=dtype
     )
     # Note: We set dtype in two places because some transformers versions are inconsistent in
     # honoring torch_dtype during from_pretrained. See:
@@ -344,6 +344,7 @@ class ZeroShotEval:
         If `input_tsv` is provided, loads data from local TSV file instead of HuggingFace.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
             logger.info(f"Loading data from local TSV: {input_tsv}")
@@ -357,9 +358,9 @@ class ZeroShotEval:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
             _require_cuda()
-            accelerator = Accelerator()
             dev = accelerator.device
             model_, tok = _load_model(model)
+            model_ = model_.to(dev)
             dataset = SingleMaskDataset(df[seq_column], tok, token_idx)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
             probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits @ {token_idx}")
@@ -374,9 +375,9 @@ class ZeroShotEval:
         y_true = df["label"].astype(int).to_numpy()
         pr_scores = _refprob_scores(df, probs, token_idx, seq_column)
         auprc = float(average_precision_score(y_true, pr_scores))
-        print(f"AUROC\t{roc_auc:.6f}")
-        print(f"AUPRC\t{auprc:.6f}")
-        if metrics_json:
+        accelerator.print(f"AUROC\t{roc_auc:.6f}")
+        accelerator.print(f"AUPRC\t{auprc:.6f}")
+        if metrics_json and accelerator.is_main_process:
             with open(metrics_json, "w") as f:
                 json.dump({"auroc": roc_auc, "auprc": auprc, "token_idx": token_idx}, f, indent=2)
 
@@ -404,6 +405,7 @@ class ZeroShotEval:
         If `input_tsv` is provided, loads data from local TSV file instead of HuggingFace.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
             logger.info(f"Loading data from local TSV: {input_tsv}")
@@ -423,9 +425,9 @@ class ZeroShotEval:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
             _require_cuda()
-            accelerator = Accelerator()
             dev = accelerator.device
             model_, tok = _load_model(model)
+            model_ = model_.to(dev)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
             probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits motif_len={motif_len}")
@@ -438,9 +440,9 @@ class ZeroShotEval:
         true_tokens = _compute_true_tokens_from_seq(df[seq_column], positions)
         token_acc = _metric_token_accuracy(probs, true_tokens)
         motif_acc = _metric_motif_accuracy(probs, true_tokens, motif_len)
-        print(f"token_accuracy\t{token_acc:.6f}")
-        print(f"motif_accuracy\t{motif_acc:.6f}")
-        if metrics_json:
+        accelerator.print(f"token_accuracy\t{token_acc:.6f}")
+        accelerator.print(f"motif_accuracy\t{motif_acc:.6f}")
+        if metrics_json and accelerator.is_main_process:
             with open(metrics_json, "w") as f:
                 json.dump({"token_accuracy": token_acc, "motif_accuracy": motif_acc}, f, indent=2)
 
@@ -482,6 +484,7 @@ class ZeroShotEval:
         accelerator = Accelerator()
         dev = accelerator.device
         model_, tok = _load_model(model)
+        model_ = model_.to(dev)
 
         # Unmasked probabilities
         ref_probs = _unmasked_probs(df["RefSeq"], tok, model_, dev, batch_size, desc="Ref (unmasked)")
@@ -495,7 +498,7 @@ class ZeroShotEval:
         scores = _sv_llr_boundary(df, ref_probs, mut_probs, flanking)
         y_true = df["label"].astype(int).to_numpy()
         auprc = float(average_precision_score(y_true, scores))
-        print(f"AUPRC\t{auprc:.6f}")
+        accelerator.print(f"AUPRC\t{auprc:.6f}")
 
         if output:
             out_df = df.copy()
@@ -528,6 +531,7 @@ class ZeroShotEval:
         Reports AUROC.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
             logger.info(f"Loading data from local TSV: {input_tsv}")
@@ -547,9 +551,9 @@ class ZeroShotEval:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
             _require_cuda()
-            accelerator = Accelerator()
             dev = accelerator.device
             model_, tok = _load_model(model)
+            model_ = model_.to(dev)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
             probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits (core/non-core) motif_len={motif_len}")
@@ -565,9 +569,9 @@ class ZeroShotEval:
         fpr, tpr, _ = roc_curve(y_true, scores)
         roc_auc = float(auc(fpr, tpr))
         auprc = float(average_precision_score(y_true, scores))
-        print(f"AUROC\t{roc_auc:.6f}")
-        print(f"AUPRC\t{auprc:.6f}")
-        if metrics_json:
+        accelerator.print(f"AUROC\t{roc_auc:.6f}")
+        accelerator.print(f"AUPRC\t{auprc:.6f}")
+        if metrics_json and accelerator.is_main_process:
             with open(metrics_json, "w") as f:
                 json.dump({"auroc": roc_auc, "auprc": auprc}, f, indent=2)
 
