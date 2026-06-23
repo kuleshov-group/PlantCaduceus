@@ -128,56 +128,60 @@ class MultiMaskDataset(Dataset):
         return {"masked_ids": input_ids}
 
 
-def _masked_probs(model, tokenizer, loader: DataLoader, device: str, desc: str = "Masked logits") -> np.ndarray:
-    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
-    all_probs = []
-    for batch in tqdm(loader, desc=desc):
-        cur_ids = batch["masked_ids"].to(device).squeeze(1)
-        with torch.inference_mode():
-            logits = model(input_ids=cur_ids).logits
-        masked_pos = (cur_ids == tokenizer.mask_token_id).unsqueeze(-1).expand(-1, -1, logits.size(-1))
-        masked_logits = torch.masked_select(logits, masked_pos).view(-1, logits.size(-1))
-        probs = torch.softmax(masked_logits[:, idxs].float(), dim=-1).cpu().numpy()
-        all_probs.append(probs)
-    return np.vstack(all_probs)
+class UnmaskedDataset(Dataset):
+    def __init__(self, sequences: pd.Series, tokenizer):
+        self.seqs = sequences.astype(str).tolist()
+        self.tok = tokenizer
 
+    def __len__(self):
+        return len(self.seqs)
 
-def _unmasked_probs(
-    sequences: pd.Series,
-    tokenizer,
-    model,
-    device: str,
-    batch_size: int,
-    desc: str = "Inference (unmasked)",
-) -> np.ndarray:
-    """Per-position probabilities over A,C,G,T for each sequence. Shape: [N, L, 4]."""
-    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
-    seqs = sequences.astype(str).tolist()
-    first_len = None
-    all_probs = None
-    for i in tqdm(range(0, len(seqs), batch_size), desc=desc):
-        batch = seqs[i : i + batch_size]
-        enc = tokenizer(
-            batch,
+    def __getitem__(self, i: int):
+        enc = self.tok(
+            self.seqs[i],
             truncation=False,
             padding=False,
             return_tensors="pt",
             return_attention_mask=False,
             return_token_type_ids=False,
         )
-        input_ids = enc["input_ids"].to(device)
+        return {"input_ids": enc["input_ids"].squeeze(0)}
+
+
+def _masked_probs(model, tokenizer, loader, accelerator: Accelerator, desc: str = "Masked logits") -> np.ndarray:
+    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
+    all_probs = []
+    for batch in tqdm(loader, desc=desc, disable=not accelerator.is_local_main_process):
+        cur_ids = batch["masked_ids"].squeeze(1)
+        with torch.inference_mode():
+            logits = model(input_ids=cur_ids).logits
+        masked_pos = (cur_ids == tokenizer.mask_token_id).unsqueeze(-1).expand(-1, -1, logits.size(-1))
+        masked_logits = torch.masked_select(logits, masked_pos).view(-1, logits.size(-1))
+        probs = torch.softmax(masked_logits[:, idxs].float(), dim=-1)
+        all_probs.append(probs)
+    all_probs = torch.cat(all_probs, dim=0)
+    return accelerator.gather_for_metrics(all_probs).cpu().numpy()
+
+
+def _unmasked_probs(loader, model, tokenizer, accelerator: Accelerator, desc: str = "Inference (unmasked)") -> np.ndarray:
+    """Per-position probabilities over A,C,G,T for each sequence. Shape: [N, L, 4]."""
+    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
+    first_len = None
+    all_probs = []
+    for batch in tqdm(loader, desc=desc, disable=not accelerator.is_local_main_process):
+        input_ids = batch["input_ids"]
         with torch.inference_mode():
             out = model(input_ids=input_ids)
         logits = out.logits[..., idxs]
-        probs = torch.softmax(logits.float(), dim=-1).cpu().numpy()
+        probs = torch.softmax(logits.float(), dim=-1)
         if first_len is None:
             first_len = probs.shape[1]
-            all_probs = np.zeros((len(seqs), first_len, 4), dtype=np.float32)
-        else:
-            if probs.shape[1] != first_len:
-                raise ValueError(f"All sequences must have same length; got {probs.shape[1]} vs {first_len}")
-        all_probs[i : i + len(batch), :, :] = probs
-    return all_probs
+        elif probs.shape[1] != first_len:
+            raise ValueError(f"All sequences must have same length; got {probs.shape[1]} vs {first_len}")
+        all_probs.append(probs)
+    all_probs = torch.cat(all_probs, dim=0)          # [N_local, L, 4]
+    gathered = accelerator.gather_for_metrics(all_probs)  # [N_total, L, 4]
+    return gathered.cpu().numpy()
 
 
 def _sv_llr_boundary(
@@ -329,7 +333,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         token_idx: int = 255,
         batch_size: int = 128,
         seq_column: str = "sequence",
@@ -358,13 +361,12 @@ class ZeroShotEval:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
             _require_cuda()
-            dev = accelerator.device
             model_, tok = _load_model(model)
-            model_ = model_.to(dev)
             dataset = SingleMaskDataset(df[seq_column], tok, token_idx)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits @ {token_idx}")
-            if save_logits:
+            model_, loader = accelerator.prepare(model_, loader)
+            probs = _masked_probs(model_, tok, loader, accelerator, desc=f"Masked logits @ {token_idx}")
+            if save_logits and accelerator.is_main_process:
                 pd.DataFrame(probs, columns=list(NUCLEOTIDES)).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
@@ -388,7 +390,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         mask_idx: Sequence[int] = (255, 256, 257),
         motif_len: int = 3,
         batch_size: int = 128,
@@ -425,13 +426,12 @@ class ZeroShotEval:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
             _require_cuda()
-            dev = accelerator.device
             model_, tok = _load_model(model)
-            model_ = model_.to(dev)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits motif_len={motif_len}")
-            if save_logits:
+            model_, loader = accelerator.prepare(model_, loader)
+            probs = _masked_probs(model_, tok, loader, accelerator, desc=f"Masked logits motif_len={motif_len}")
+            if save_logits and accelerator.is_main_process:
                 pd.DataFrame(probs, columns=list(NUCLEOTIDES)).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
@@ -452,7 +452,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         batch_size: int = 64,
         flanking: int = 5,
         output: Optional[str] = None,
@@ -482,17 +481,20 @@ class ZeroShotEval:
 
         _require_cuda()
         accelerator = Accelerator()
-        dev = accelerator.device
         model_, tok = _load_model(model)
-        model_ = model_.to(dev)
 
-        # Unmasked probabilities
-        ref_probs = _unmasked_probs(df["RefSeq"], tok, model_, dev, batch_size, desc="Ref (unmasked)")
-        mut_probs = _unmasked_probs(df["MutSeq"], tok, model_, dev, batch_size, desc="Mut (unmasked)")
+        ref_dataset = UnmaskedDataset(df["RefSeq"], tok)
+        mut_dataset = UnmaskedDataset(df["MutSeq"], tok)
+        ref_loader = DataLoader(ref_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+        mut_loader = DataLoader(mut_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+        model_, ref_loader, mut_loader = accelerator.prepare(model_, ref_loader, mut_loader)
 
-        if save_ref_logits:
+        ref_probs = _unmasked_probs(ref_loader, model_, tok, accelerator, desc="Ref (unmasked)")
+        mut_probs = _unmasked_probs(mut_loader, model_, tok, accelerator, desc="Mut (unmasked)")
+
+        if save_ref_logits and accelerator.is_main_process:
             np.savez_compressed(save_ref_logits, logits=ref_probs)
-        if save_mut_logits:
+        if save_mut_logits and accelerator.is_main_process:
             np.savez_compressed(save_mut_logits, logits=mut_probs)
 
         scores = _sv_llr_boundary(df, ref_probs, mut_probs, flanking)
@@ -500,7 +502,7 @@ class ZeroShotEval:
         auprc = float(average_precision_score(y_true, scores))
         accelerator.print(f"AUPRC\t{auprc:.6f}")
 
-        if output:
+        if output and accelerator.is_main_process:
             out_df = df.copy()
             out_df["score"] = scores
             out_df = out_df.drop(columns=["Left5_Positions", "Right5_Positions"], errors="ignore")
@@ -512,7 +514,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         mask_idx: Sequence[int] = (255, 256, 257),
         motif_len: int = 3,
         batch_size: int = 128,
@@ -551,13 +552,12 @@ class ZeroShotEval:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
             _require_cuda()
-            dev = accelerator.device
             model_, tok = _load_model(model)
-            model_ = model_.to(dev)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits (core/non-core) motif_len={motif_len}")
-            if save_logits:
+            model_, loader = accelerator.prepare(model_, loader)
+            probs = _masked_probs(model_, tok, loader, accelerator, desc=f"Masked logits (core/non-core) motif_len={motif_len}")
+            if save_logits and accelerator.is_main_process:
                 pd.DataFrame(probs, columns=["A", "C", "G", "T"]).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
