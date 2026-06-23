@@ -24,6 +24,7 @@ import pandas as pd
 import torch
 from accelerate import Accelerator
 from Bio import SeqIO
+from scipy import stats
 from tqdm import tqdm
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 
@@ -502,6 +503,146 @@ def _detect_regions(
     return avg_probs, regions, threshold
 
 
+# ---------------------------------------------------------------------------
+# Regulatory vs flanking comparison
+# ---------------------------------------------------------------------------
+
+def _extract_regulatory_vs_flanking(
+    avg_probs: np.ndarray,
+    window_start: int,
+    gene: dict,
+    regulators: list,
+) -> tuple:
+    """Return (reg_probs, flank_probs, reg_type_probs).
+
+    reg_probs       – confidence at positions overlapping any regulator span.
+    flank_probs     – confidence at positions outside the gene body that do not
+                      overlap any regulator.
+    reg_type_probs  – {reg_type: probs_array} for per-type breakdown.
+    """
+    L = len(avg_probs)
+    valid = ~np.isnan(avg_probs)
+
+    reg_mask = np.zeros(L, dtype=bool)
+    type_masks = defaultdict(lambda: np.zeros(L, dtype=bool))
+
+    for reg_type, g_start, g_end in regulators:
+        rel_s = max(0, g_start - window_start)
+        rel_e = min(L, g_end - window_start)
+        if rel_s < rel_e:
+            reg_mask[rel_s:rel_e] = True
+            type_masks[reg_type][rel_s:rel_e] = True
+
+    gene_rel_s = max(0, gene["start"] - window_start)
+    gene_rel_e = min(L, gene["end"] - window_start)
+    pos = np.arange(L)
+    flank_mask = ((pos < gene_rel_s) | (pos >= gene_rel_e)) & ~reg_mask
+
+    reg_probs   = avg_probs[reg_mask & valid]
+    flank_probs = avg_probs[flank_mask & valid]
+    reg_type_probs = {rt: avg_probs[m & valid] for rt, m in type_masks.items()}
+    return reg_probs, flank_probs, reg_type_probs
+
+
+def _test_regulatory_vs_flanking(
+    reg_probs: np.ndarray,
+    flank_probs: np.ndarray,
+) -> dict:
+    """Mann-Whitney U test comparing regulatory and flanking confidence scores."""
+    result = {
+        "n_regulatory":      len(reg_probs),
+        "n_flanking":        len(flank_probs),
+        "mean_regulatory":   float(np.mean(reg_probs))   if len(reg_probs)   else float("nan"),
+        "mean_flanking":     float(np.mean(flank_probs)) if len(flank_probs) else float("nan"),
+        "median_regulatory": float(np.median(reg_probs))   if len(reg_probs)   else float("nan"),
+        "median_flanking":   float(np.median(flank_probs)) if len(flank_probs) else float("nan"),
+        "mannwhitney_U":     float("nan"),
+        "pvalue":            float("nan"),
+        "significant":       False,
+    }
+    if len(reg_probs) >= 2 and len(flank_probs) >= 2:
+        u_stat, pval = stats.mannwhitneyu(reg_probs, flank_probs, alternative="two-sided")
+        result["mannwhitney_U"] = float(u_stat)
+        result["pvalue"]        = float(pval)
+        result["significant"]   = bool(pval < 0.05)
+    return result
+
+
+def plot_regulatory_comparison(
+    gene_id: str,
+    reg_probs: np.ndarray,
+    flank_probs: np.ndarray,
+    reg_type_probs: dict,
+    stat_result: dict,
+    out_path: str,
+) -> None:
+    """Save a two-panel figure: violin plot per region type + density histogram."""
+    type_labels = list(reg_type_probs.keys())
+    n_types = len(type_labels)
+
+    # Build ordered groups: Flanking first, then per-type, then "All Regulatory" if >1 type
+    groups = [("Flanking", flank_probs, "#90caf9")]
+    for i, rtype in enumerate(type_labels):
+        groups.append((rtype, reg_type_probs[rtype], _REG_PALETTE[i % len(_REG_PALETTE)]))
+    if n_types > 1:
+        groups.append(("All Regulatory", reg_probs, "#388e3c"))
+
+    # Drop empty groups before plotting
+    groups = [(lbl, arr, col) for lbl, arr, col in groups if len(arr) > 0]
+
+    fig, (ax_vio, ax_hist) = plt.subplots(1, 2, figsize=(12, 5))
+
+    pval = stat_result["pvalue"]
+    pval_str = f"{pval:.3e}" if not np.isnan(pval) else "n/a"
+    sig_str = "significant" if stat_result["significant"] else "not significant"
+    fig.suptitle(
+        f"{gene_id}  –  Regulatory vs Flanking Confidence\n"
+        f"Mann-Whitney U={stat_result['mannwhitney_U']:.1f}  p={pval_str}  ({sig_str})",
+        fontsize=10,
+    )
+
+    # ---- Violin plot ----
+    if groups:
+        labels, data, colors = zip(*groups)
+        positions = list(range(len(groups)))
+        parts = ax_vio.violinplot(data, positions=positions,
+                                   showmedians=True, showextrema=True)
+        for pc, col in zip(parts["bodies"], colors):
+            pc.set_facecolor(col)
+            pc.set_alpha(0.7)
+        for key in ("cmedians", "cmins", "cmaxes", "cbars"):
+            parts[key].set_color("#333333")
+        ax_vio.set_xticks(positions)
+        ax_vio.set_xticklabels(labels, rotation=20, ha="right", fontsize=8)
+    ax_vio.set_ylim(0, 1)
+    ax_vio.set_ylabel("P(ref | context)", fontsize=9)
+    ax_vio.set_title("Confidence by region type", fontsize=9)
+    ax_vio.text(
+        0.02, 0.98,
+        f"n_reg={stat_result['n_regulatory']}  n_flank={stat_result['n_flanking']}",
+        transform=ax_vio.transAxes, fontsize=7, va="top",
+    )
+
+    # ---- Density histogram ----
+    bins = np.linspace(0, 1, 51)
+    if len(flank_probs) > 0:
+        ax_hist.hist(flank_probs, bins=bins, alpha=0.5, color="#90caf9",
+                     density=True, label=f"Flanking (n={len(flank_probs)})")
+    if len(reg_probs) > 0:
+        ax_hist.hist(reg_probs, bins=bins, alpha=0.5, color="#388e3c",
+                     density=True, label=f"Regulatory (n={len(reg_probs)})")
+    ax_hist.set_xlabel("P(ref | context)", fontsize=9)
+    ax_hist.set_ylabel("Density", fontsize=9)
+    ax_hist.set_title("Confidence distribution", fontsize=9)
+    ax_hist.legend(fontsize=8)
+
+    fig.tight_layout()
+    os.makedirs(os.path.dirname(os.path.abspath(out_path)), exist_ok=True)
+    fig.savefig(out_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    logger.info("Saved regulatory comparison → %s", out_path)
+
+
 def _shade_regions(ax, x, gene_start, gene_end, exons) -> None:
     ax.axvspan(x[0], x[-1], color="#f0f0f0", zorder=0)
     ax.axvspan(gene_start, gene_end, color="#fff9c4", zorder=1)
@@ -681,6 +822,8 @@ def parse_args():
                              "(default: 0).")
     parser.add_argument("--output-dir", default="./confidence_plots",
                         help="Output directory; one PNG + npz + tsv per gene saved here.")
+    parser.add_argument("--force", action="store_true",
+                        help="Re-run inference even if a cached .npz exists for the gene.")
     return parser.parse_args()
 
 
@@ -728,58 +871,98 @@ def main():
     # ---- regulator positions ----
     regulator_map = parse_regulator_tab(args.regulator) if args.regulator else {}
 
-    # Load all models once — each is kept in memory for the full gene loop
+    # Load all models once — but only if at least one gene needs inference
+    npz_paths_needed = [
+        os.path.join(args.output_dir, f"{g['gene_id']}.npz") for g in genes
+    ]
+    needs_inference = args.force or any(not os.path.exists(p) for p in npz_paths_needed)
+
     loaded_models = []
-    for model_path in args.models:
-        m_name = os.path.basename(model_path.rstrip("/"))
-        accelerator.print(f"Loading model: {m_name}")
-        m, tok = _load_model(model_path)
-        m = m.to(dev)
-        loaded_models.append((m_name, m, tok))
+    if needs_inference:
+        for model_path in args.models:
+            m_name = os.path.basename(model_path.rstrip("/"))
+            accelerator.print(f"Loading model: {m_name}")
+            m, tok = _load_model(model_path)
+            m = m.to(dev)
+            loaded_models.append((m_name, m, tok))
+    else:
+        # Derive model names from --models without loading weights
+        loaded_models = [
+            (os.path.basename(p.rstrip("/")), None, None) for p in args.models
+        ]
+
+    model_names = [m_name for m_name, _, _ in loaded_models]
+
+    comparison_rows = []
 
     for gene in genes:
         gene_id = gene["gene_id"]
         chrom = gene["chrom"]
-        accelerator.print(f"Processing {gene_id} ({chrom}:{gene['start']}-{gene['end']})")
-
-        try:
-            sequence, window_start = extract_window(
-                fasta_dict, chrom,
-                gene["start"], gene["end"],
-                args.window_size,
-            )
-        except ValueError as e:
-            logger.warning("Skipping %s: %s", gene_id, e)
-            continue
-
-        model_results = []
-        for (m_name, m, tok) in loaded_models:
-            ref_probs = compute_per_position_ref_probs(
-                m, tok, sequence, args.batch_size, dev
-            )
-            model_results.append((m_name, ref_probs))
-
         npz_path = os.path.join(args.output_dir, f"{gene_id}.npz")
-        exons_arr = (
-            np.array(gene["exons"], dtype=np.int64)
-            if gene["exons"]
-            else np.empty((0, 2), dtype=np.int64)
-        )
-        npz_data = {
-            "window_start": np.array(window_start),
-            "sequence": np.array([sequence]),
-            "chrom": np.array([chrom]),
-            "gene_start": np.array(gene["start"]),
-            "gene_end": np.array(gene["end"]),
-            "strand": np.array([gene["strand"]]),
-            "exons": exons_arr,
-        }
-        for m_name, ref_probs in model_results:
-            npz_data[f"probs_{m_name}"] = ref_probs
-        np.savez_compressed(npz_path, **npz_data)
-        logger.info("Saved probabilities → %s", npz_path)
 
-        # Detect high-confidence regions (averaged across models)
+        # ---- Load from cache or run inference ----
+        if not args.force and os.path.exists(npz_path):
+            accelerator.print(f"Loading cached results for {gene_id} from {npz_path}")
+            cached = np.load(npz_path, allow_pickle=True)
+            window_start = int(cached["window_start"])
+            sequence     = str(cached["sequence"][0])
+            # Restore gene metadata from cache (may be richer than BED-only source)
+            gene["start"]  = int(cached["gene_start"])
+            gene["end"]    = int(cached["gene_end"])
+            gene["strand"] = str(cached["strand"][0])
+            exons_arr = cached["exons"]
+            gene["exons"]  = [tuple(e) for e in exons_arr] if exons_arr.size else []
+            model_results  = [
+                (mn, cached[f"probs_{mn}"]) for mn in model_names
+                if f"probs_{mn}" in cached
+            ]
+            if not model_results:
+                logger.warning(
+                    "No probability arrays found in %s for models %s; skipping.",
+                    npz_path, model_names,
+                )
+                continue
+        else:
+            accelerator.print(
+                f"Running inference for {gene_id} ({chrom}:{gene['start']}-{gene['end']})"
+            )
+            try:
+                sequence, window_start = extract_window(
+                    fasta_dict, chrom,
+                    gene["start"], gene["end"],
+                    args.window_size,
+                )
+            except ValueError as e:
+                logger.warning("Skipping %s: %s", gene_id, e)
+                continue
+
+            model_results = []
+            for (m_name, m, tok) in loaded_models:
+                ref_probs = compute_per_position_ref_probs(
+                    m, tok, sequence, args.batch_size, dev
+                )
+                model_results.append((m_name, ref_probs))
+
+            exons_arr = (
+                np.array(gene["exons"], dtype=np.int64)
+                if gene["exons"]
+                else np.empty((0, 2), dtype=np.int64)
+            )
+            npz_data = {
+                "window_start": np.array(window_start),
+                "sequence":     np.array([sequence]),
+                "chrom":        np.array([chrom]),
+                "gene_start":   np.array(gene["start"]),
+                "gene_end":     np.array(gene["end"]),
+                "strand":       np.array([gene["strand"]]),
+                "exons":        exons_arr,
+            }
+            for m_name, ref_probs in model_results:
+                npz_data[f"probs_{m_name}"] = ref_probs
+            np.savez_compressed(npz_path, **npz_data)
+            logger.info("Saved probabilities → %s", npz_path)
+
+        # ---- Detect high-confidence regions (averaged across models) ----
         avg_probs, regions, threshold = _detect_regions(
             model_results, args.smooth_window, args.n_sigma,
             args.min_length, args.merge_gap,
@@ -789,25 +972,25 @@ def main():
             f"(threshold={threshold:.4f}, n_sigma={args.n_sigma})"
         )
 
-        # Save TSV
+        # ---- Save high-confidence regions TSV ----
         tsv_path = os.path.join(args.output_dir, f"{gene_id}.tsv")
         tsv_header = ["chrom", "start", "end", "rel_start", "rel_end",
                       "length", "mean_prob", "max_prob", "sequence"]
         tsv_rows = []
         for rel_s, rel_e in regions:
             g_start = window_start + rel_s
-            g_end = window_start + rel_e
+            g_end   = window_start + rel_e
             region_probs = avg_probs[rel_s:rel_e]
             tsv_rows.append({
-                "chrom": chrom,
-                "start": g_start,
-                "end": g_end,
-                "rel_start": rel_s,
-                "rel_end": rel_e,
-                "length": rel_e - rel_s,
-                "mean_prob": round(float(np.nanmean(region_probs)), 6),
-                "max_prob": round(float(np.nanmax(region_probs)), 6),
-                "sequence": sequence[rel_s:rel_e],
+                "chrom":      chrom,
+                "start":      g_start,
+                "end":        g_end,
+                "rel_start":  rel_s,
+                "rel_end":    rel_e,
+                "length":     rel_e - rel_s,
+                "mean_prob":  round(float(np.nanmean(region_probs)), 6),
+                "max_prob":   round(float(np.nanmax(region_probs)), 6),
+                "sequence":   sequence[rel_s:rel_e],
             })
         with open(tsv_path, "w") as fh:
             fh.write("\t".join(tsv_header) + "\n")
@@ -817,10 +1000,46 @@ def main():
 
         gene_regulators = regulator_map.get(gene_id, [])
 
+        # ---- Regulatory vs flanking statistical comparison ----
+        if gene_regulators:
+            reg_probs, flank_probs, reg_type_probs = _extract_regulatory_vs_flanking(
+                avg_probs, window_start, gene, gene_regulators,
+            )
+            stat_result = _test_regulatory_vs_flanking(reg_probs, flank_probs)
+            accelerator.print(
+                f"  Regulatory (n={stat_result['n_regulatory']}) vs "
+                f"Flanking (n={stat_result['n_flanking']}): "
+                f"mean_reg={stat_result['mean_regulatory']:.4f}  "
+                f"mean_flank={stat_result['mean_flanking']:.4f}  "
+                f"p={stat_result['pvalue']:.3e}"
+            )
+            cmp_path = os.path.join(args.output_dir, f"{gene_id}_reg_comparison.png")
+            plot_regulatory_comparison(
+                gene_id, reg_probs, flank_probs, reg_type_probs, stat_result, cmp_path,
+            )
+            comparison_rows.append({"gene_id": gene_id, **stat_result})
+
+        # ---- Main confidence figure ----
         out_path = os.path.join(args.output_dir, f"{gene_id}.png")
         visualize_gene(gene, window_start, sequence, model_results, out_path,
                        smooth_window=args.smooth_window, highlight_regions=regions,
                        regulators=gene_regulators)
+
+    # ---- Summary: regulatory comparison across all genes ----
+    if comparison_rows:
+        cmp_tsv_path = os.path.join(args.output_dir, "regulatory_comparison.tsv")
+        cmp_cols = [
+            "gene_id", "n_regulatory", "n_flanking",
+            "mean_regulatory", "mean_flanking",
+            "median_regulatory", "median_flanking",
+            "mannwhitney_U", "pvalue", "significant",
+        ]
+        with open(cmp_tsv_path, "w") as fh:
+            fh.write("\t".join(cmp_cols) + "\n")
+            for row in comparison_rows:
+                fh.write("\t".join(str(row.get(c, "")) for c in cmp_cols) + "\n")
+        logger.info("Saved regulatory comparison summary → %s", cmp_tsv_path)
+        accelerator.print(f"Regulatory comparison saved to {cmp_tsv_path}")
 
     accelerator.print(f"Done. Figures saved to {args.output_dir}/")
 
