@@ -50,6 +50,14 @@ export NCCL_IB_DISABLE=1
 # Disable W&B (TensorBoard is our logging target now).
 export WANDB_DISABLED=true
 
+# --- Resume from checkpoint -------------------------------------------
+# Set RESUME_FROM to a checkpoint path to continue an interrupted run.
+# Examples:
+#   RESUME_FROM=./model/plantcad2_small_lettuce_20240601_120000/checkpoint-500
+#   RESUME_FROM=latest   (auto-detects last checkpoint in the run dir)
+# When set, OUTPUT_ROOT/RUN_NAME must point at the *same* run directory.
+RESUME_FROM="${RESUME_FROM:-}"
+
 # --- Paths ------------------------------------------------------------
 # NOTE: these assume you cd into the plantcad/ repo before running.
 # Use the exact folder name as it sits in model/ — the suffix encodes
@@ -168,7 +176,8 @@ torchrun --nproc_per_node=8 --master_port=29501 \
     $PRECISION_FLAG \
     $MAX_STEPS_FLAG \
     $NUM_EPOCHS_FLAG \
-    $SAMPLE_CAPS
+    $SAMPLE_CAPS \
+    ${RESUME_FROM:+--resume_from_checkpoint "$RESUME_FROM"}
 
 echo ""
 echo "Done. Run directory: ${OUTPUT_ROOT}/${RUN_NAME}"

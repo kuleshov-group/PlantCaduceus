@@ -328,6 +328,9 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--max_train_samples", type=int, default=None,
                    help="Cap train rows for a sanity probe.")
     p.add_argument("--max_eval_samples", type=int, default=None)
+    p.add_argument("--resume_from_checkpoint", default=None,
+                   help="Path to a checkpoint dir (e.g. model/run/checkpoint-500) "
+                        "or 'latest' to auto-detect the most recent checkpoint in output_dir.")
 
     return p.parse_args()
 
@@ -445,7 +448,7 @@ def main() -> None:
         # silently strips our `loss_weights` column on the way into the
         # collator and we'd compute unweighted loss.
         remove_unused_columns=False,
-        overwrite_output_dir=True,
+        overwrite_output_dir=args.resume_from_checkpoint is None,
     )
 
     # --- Trainer ------------------------------------------------------
@@ -461,7 +464,7 @@ def main() -> None:
     # --- Train --------------------------------------------------------
     if args.do_train:
         log.info("Starting training")
-        train_result = trainer.train()
+        train_result = trainer.train(resume_from_checkpoint=args.resume_from_checkpoint or None)
         # Save the LoRA *adapter* (small — just the deltas). This is
         # what you'd ship for a downstream eval that re-loads the base
         # PlantCAD2-Small and overlays the adapter.
