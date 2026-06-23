@@ -1,0 +1,26 @@
+Bootstrap: docker
+From: ghcr.io/plantcad/plantcad:v1.1.0
+
+%post
+    pip install --no-cache-dir fire
+
+%runscript
+    exec /bin/bash "$@"
+
+# Build:
+#   apptainer build plantcad_v1.1.0.sif container.def
+#
+# Run interactively (mirrors docker-compose):
+#   apptainer shell --nv \
+#     --bind $(pwd):/workspace \
+#     --bind /mnt/data1/shared/plantcad:/mnt/data1/shared/plantcad \
+#     --pwd /workspace \
+#     plantcad_v1.1.0.sif
+#
+# Run finetune script:
+#   apptainer exec --nv \
+#     --bind $(pwd):/workspace \
+#     --bind /mnt/data1/shared/plantcad:/mnt/data1/shared/plantcad \
+#     --pwd /workspace \
+#     plantcad_v1.1.0.sif \
+#     bash src/run_finetune_v2.sh

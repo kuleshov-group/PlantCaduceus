@@ -30,22 +30,14 @@
 # ---------------------------------------------------------------------
 
 set -euo pipefail
-
-# --- Environment ------------------------------------------------------
-# Offline mode prevents the HF hub from being contacted at runtime
-# (saves time on the cluster and avoids "no internet" hangs).
-export HF_DATASETS_OFFLINE=1
-export TRANSFORMERS_OFFLINE=1
-export TOKENIZERS_PARALLELISM=false
-
 # Reduce memory fragmentation — useful when we're tight on the 11 GB
 # 2080 Ti's. Has no downside on bigger GPUs.
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+# export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # NCCL stability knobs for consumer-grade GPUs that lack proper P2P
 # and InfiniBand. Same flags that finally made v1 stop crashing.
-export NCCL_P2P_DISABLE=1
-export NCCL_IB_DISABLE=1
+# export NCCL_P2P_DISABLE=1
+# export NCCL_IB_DISABLE=1
 
 # Disable W&B (TensorBoard is our logging target now).
 export WANDB_DISABLED=true
@@ -54,7 +46,7 @@ export WANDB_DISABLED=true
 # NOTE: these assume you cd into the plantcad/ repo before running.
 # Use the exact folder name as it sits in model/ — the suffix encodes
 # the architecture (24 layers, hidden dim 768).
-MODEL_PATH="./model/PlantCAD2-Small-l24-d0768"
+MODEL_PATH="./model/PlantCAD2-Large-l48-d1536"
 DATASET_PATH="./data/lettuce_hf_dataset_rand8192_50k"
 
 # Output root for all runs.
@@ -66,7 +58,7 @@ OUTPUT_ROOT="./model"
 # rank called datetime.now() independently inside Python, which under
 # 8-way parallelism could land on different seconds and create up to
 # 8 sibling directories per launch — confusing and wasteful.
-RUN_NAME="plantcad2_small_lettuce_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="plantcad2_large_lettuce_$(date +%Y%m%d_%H%M%S)"
 echo "Run name: $RUN_NAME"
 echo "Output dir: $OUTPUT_ROOT/$RUN_NAME"
 
@@ -74,14 +66,14 @@ echo "Output dir: $OUTPUT_ROOT/$RUN_NAME"
 # LoRA wants a higher LR than full fine-tune; 1e-3 is the canonical
 # starting point in the PEFT examples.
 LEARNING_RATE=1e-3
-WARMUP_STEPS=100
+WARMUP_STEPS=250
 LR_SCHEDULER="cosine"
 
 # Memory: PlantCAD2-Small @ 8192 bp on a 2080 Ti is tight. We use
 # bs=1 per device and let gradient accumulation reach an effective
 # batch of 64 (1 * 8 GPUs * 8 accum).
 PER_DEVICE_BS=1
-GRAD_ACCUM=8
+GRAD_ACCUM=16
 
 # Precision: fp32. We tried --fp16, but Mamba2's SSD Triton kernel
 # (mamba_split_conv1d_scan_combined) requires tensor-core instructions
@@ -89,7 +81,7 @@ GRAD_ACCUM=8
 # Ti's sm_75 (Turing). fp32 path through the same kernel DOES compile
 # on sm_75; we just can't afford 8192 bp activations in 11 GB. We deal
 # with that by truncating sequences (see MAX_SEQ_LENGTH below).
-PRECISION_FLAG=""
+PRECISION_FLAG="--fp16"
 
 # Sequence-length cap. Dataset chunks are 8192 bp, but at fp32 on a
 # 2080 Ti the full length OOMs. We worked down: 8192 OOM, 4096 OOM,
@@ -99,7 +91,7 @@ PRECISION_FLAG=""
 # the context PlantCAD v1 ever saw (512 bp). Tokeniser picks a
 # random window each epoch, so we cover all 8192 bp of each chunk
 # across multiple passes.
-MAX_SEQ_LENGTH=1024
+MAX_SEQ_LENGTH=8192
 
 # LoRA config — sensible defaults (per professor "use sensible defaults").
 LORA_R=16
@@ -142,7 +134,7 @@ fi
 # PlantCAD2-Small (88M params fit easily under LoRA); they differ in
 # the data batch they're processing, and gradients are averaged. No
 # model parallelism needed for 88M params.
-torchrun --nproc_per_node=8 --master_port=29501 \
+torchrun --nproc_per_node=4 --master_port=29501 \
     src/HF_pre_train_lora.py \
     --ddp_find_unused_parameters \
     --model_name_or_path "$MODEL_PATH" \
