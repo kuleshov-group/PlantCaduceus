@@ -40,7 +40,7 @@ PlantCaduceus, with its short name of **PlantCAD**, is a plant DNA LM based on t
 
 ## Model summary
 
-Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a) and [PlantCAD2](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6).
+Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https://huggingface.co/collections/kuleshov-group/plantcaduceus-512bp-len-665a229ee098db706a55e44a), [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2), and [PlantCAD2-fine-tuned](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6).
 
 | Model | Max Input Length | Model Size | Embedding Size |
 | :--- | :--- | :--- | :--- |
