@@ -56,6 +56,57 @@ Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https:
 
 > **⚠️ Important:** The "Max Input Length" is a hard limit — your input sequences **cannot** exceed this length. Use `-contextSize 512` for PlantCAD models and up to `-contextSize 8192` for PlantCAD2 models. See [Model Recommendations](docs/model-recommendations.md) for guidance on which model to use.
 
+> [!WARNING]
+> Double check the parameter count of the model. On some versions of Transformers, weight tying can break. If this happens, expand the section below and run the following function to re-tie the weights.
+>
+> <details>
+> <summary><strong>Show re-tying function</strong></summary>
+>
+> ```python
+>def fix_and_register_ties(model, fwd_pattern=“fwd”, rev_pattern=“rev”):
+>    “”"
+>    Ties weights in memory and generates the required _tied_weights_keys.
+>    To be used whenever model param count is ~2x or the warning of uninitialized
+>    paramters is recieved
+>    Future revision wont need after _tie_weights() is fixed.
+>    “”"
+>    tied_paths = []
+>
+>    # Start with existing tied keys (like word embeddings) if present
+>    if hasattr(model, “_tied_weights_keys”) and model._tied_weights_keys is not None:
+>        tied_paths.extend(model._tied_weights_keys)
+>
+>    # Dictionary of all modules for quick lookup
+>    num_modules = dict(model.named_modules())
+>
+>    for name, module in num_modules.items():
+>        if fwd_pattern in name and “proj” in name:
+>            rev_name = name.replace(fwd_pattern, rev_pattern)
+>
+>            if rev_name in num_modules:
+>                fwd_mod = module
+>                rev_mod = num_modules[rev_name]
+>
+>                # Check if it’s a layer with weights (Linear, Conv, etc.)
+>                if hasattr(fwd_mod, “weight”):
+>                    # 1. Physical memory tie
+>                    rev_mod.weight = fwd_mod.weight
+>                    # 2. Add to HF tracking list
+>                    tied_paths.append(f”{rev_name}.weight”)
+>
+>                if hasattr(fwd_mod, “bias”) and fwd_mod.bias is not None:
+>                    rev_mod.bias = fwd_mod.bias
+>                    tied_paths.append(f”{rev_name}.bias”)
+>                # Logging for debugging
+>                print(f”Bound: {rev_name} -> {name}“)
+>
+>    # Deduplicate and assign to the magic HF attribute
+>    model._tied_weights_keys = list(set(tied_paths))
+>    print(sum([x.numel() for x in model.parameters()]))
+>    return model
+> ```
+>
+> </details>
 ## Installation
 
 | Option | Best for |
