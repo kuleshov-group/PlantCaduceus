@@ -57,7 +57,7 @@ Pre-trained models have been uploaded to **HuggingFace 🤗**: [PlantCAD](https:
 > **⚠️ Important:** The "Max Input Length" is a hard limit — your input sequences **cannot** exceed this length. Use `-contextSize 512` for PlantCAD models and up to `-contextSize 8192` for PlantCAD2 models. See [Model Recommendations](docs/model-recommendations.md) for guidance on which model to use.
 
 > [!WARNING]
-> Double check the parameter count of the model. On some versions of Transformers, weight tying can break resulting in double the amount of apparent parameters. If this happens, expand the section below and run the following function on the model to return a version of the model with the wieghts tied again.
+> Double check the parameter count of the model. On some versions of Transformers, weight tying can break resulting in double the amount of apparent parameters. You can check the parameter count these models using `print(f"Num Params: {model.num_parameters():,}")`.  If the observed parameter count is double the parameter count listed in the above table, expand the section below and run the following function on the model to return a version of the model with the wieghts tied again.
 >
 > <details>
 > <summary><strong>Show re-tying function</strong></summary>
