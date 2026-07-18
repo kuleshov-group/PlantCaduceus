@@ -78,16 +78,21 @@ def write_sequence_chunks(
     with open(output_path, "w", newline="") as out_file:
         out_file.write("sequence\n")
         for _ in trange(num_samples):
-            seq_id, gstart, gend = random.choice(eligible)
-            seq = seqs[seq_id]
-            seq_len = len(seq)
+            while True:
+                seq_id, gstart, gend = random.choice(eligible)
+                seq = seqs[seq_id]
+                seq_len = len(seq)
 
-            motif_start = random.randint(gstart, gend - MOTIF_LEN)
-            chunk_start = motif_start - motif_center_offset
-            # Clamp so the chunk stays within the sequence
-            chunk_start = max(0, min(seq_len - chunk_size, chunk_start))
+                motif_start = random.randint(gstart, gend - MOTIF_LEN)
+                chunk_start = motif_start - motif_center_offset
+                chunk_start = max(0, min(seq_len - chunk_size, chunk_start))
 
-            out_file.write(f"{seq[chunk_start:chunk_start + chunk_size]}\n")
+                chunk = seq[chunk_start:chunk_start + chunk_size]
+                motif = seq[motif_start:motif_start + MOTIF_LEN]
+                if all(b in "ATCGatcg" for b in motif):
+                    break
+
+            out_file.write(f"{chunk}\n")
 
 
 if __name__ == "__main__":
