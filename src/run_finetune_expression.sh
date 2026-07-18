@@ -14,12 +14,16 @@
 #   2. `lora_fine_tune.py train --task_type regression`
 #
 # How to run:
-#   1. (one-time) Build the (sequence, label) TSVs:
+#   1. (one-time) Build the (sequence, label) TSVs. --counts-tsv accepts one or
+#      more per-exon count TSVs sharing the same exon ID space (e.g. separate
+#      studies); their experiment columns are merged and averaged together:
 #        python src/scripts/build_expression_dataset.py \
-#            --counts-tsv data/merged_output.tsv \
+#            --counts-tsv data/expression_7.tsv data/expression_72.tsv data/expression_85.tsv \
 #            --gff data/GCF_002870075.5_Lsat_Salinas_v15_genomic.gff \
 #            --fasta data/GCF_002870075.5_Lsat_Salinas_v15_genomic.fna \
 #            --output-prefix data/expression_dataset
+#      These count TSVs can be large; add --max-rows-per-tsv N for a fast
+#      smoke-test build instead of processing the full files.
 #
 #   2. (recommended) Smoke-test the pipeline first:
 #        SANITY=1 bash src/run_finetune_expression.sh

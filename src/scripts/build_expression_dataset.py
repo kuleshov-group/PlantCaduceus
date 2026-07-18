@@ -5,23 +5,35 @@ build_expression_dataset.py
 
 Build a (sequence, label) train/validation TSV for gene-expression-count
 regression fine-tuning of PlantCAD2, from:
-  - a per-exon RNA-seq read count matrix (data/merged_output.tsv format:
-    one row per exon ID, one column per experiment)
+  - one or more per-exon RNA-seq read count matrices (data/merged_output.tsv
+    format: one row per exon ID, one column per experiment). Multiple files
+    are treated as separate experiment batches over the same exon set (e.g.
+    different studies) and merged by exon ID before averaging -- equivalent
+    to column-concatenating them into one wide table first.
   - a GFF3 gene/exon annotation for the same assembly
   - the matching genome FASTA
 
 For each gene:
-  1. average each of its exons' read counts across experiment columns
+  1. average each of its exons' read counts across every experiment column
+     from every input counts TSV
   2. take the max averaged count across the gene's exons as its expression label
   3. extract a fixed-length DNA window centered on the gene's midpoint
      (reverse-complemented for '-' strand genes so orientation is 5'->3')
 
 Usage:
     python src/scripts/build_expression_dataset.py \
-        --counts-tsv data/merged_output.tsv \
+        --counts-tsv data/expression_7.tsv data/expression_72.tsv data/expression_85.tsv \
         --gff data/GCF_002870075.5_Lsat_Salinas_v15_genomic.gff \
         --fasta data/GCF_002870075.5_Lsat_Salinas_v15_genomic.fna \
         --output-prefix data/expression_dataset
+
+    # Smoke test on a slice of each (large) counts TSV instead of the full file:
+    python src/scripts/build_expression_dataset.py \
+        --counts-tsv data/expression_7.tsv data/expression_72.tsv data/expression_85.tsv \
+        --max-rows-per-tsv 2000 \
+        --gff data/GCF_002870075.5_Lsat_Salinas_v15_genomic.gff \
+        --fasta data/GCF_002870075.5_Lsat_Salinas_v15_genomic.fna \
+        --output-prefix /tmp/expression_dataset_smoke
 """
 
 from __future__ import annotations
@@ -29,7 +41,7 @@ from __future__ import annotations
 import argparse
 import logging
 from pathlib import Path
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -88,27 +100,48 @@ def parse_gff(gff_path: str) -> Tuple[Dict[str, Tuple[str, int, int, str]], Dict
     return genes, exon_to_gene
 
 
-def load_gene_labels(counts_tsv: str, exon_to_gene: Dict[str, str]) -> pd.DataFrame:
-    """Average each exon's counts across experiments, then take the max per gene."""
-    df = pd.read_csv(counts_tsv, sep="\t")
-    is_exon = df["ID"].str.startswith("exon-")
+def load_gene_labels(
+    counts_tsvs: List[str],
+    exon_to_gene: Dict[str, str],
+    max_rows_per_tsv: Optional[int] = None,
+) -> pd.DataFrame:
+    """Merge one or more per-exon count TSVs by exon ID, average every experiment
+    column across all of them, then take the max averaged count per gene.
+    """
+    per_file = []
+    for path in counts_tsvs:
+        df = pd.read_csv(path, sep="\t", nrows=max_rows_per_tsv)
+        is_exon = df["ID"].str.startswith("exon-")
+        log.info(
+            "Loaded %d rows from %s (%d exon rows, %d non-exon rows dropped, %d experiment columns)",
+            len(df), path, int(is_exon.sum()), int((~is_exon).sum()), df.shape[1] - 1,
+        )
+        df = df.loc[is_exon].set_index("ID")
+        # Prefix columns with the source file's stem so experiment columns that
+        # happen to share a name across files (not expected, but not guaranteed)
+        # can't collide when concatenated below.
+        stem = Path(path).stem
+        df = df.rename(columns={c: f"{stem}::{c}" for c in df.columns})
+        per_file.append(df)
+
+    # Align by exon ID (outer join): an exon missing from one file -- e.g. a
+    # truncated --max-rows-per-tsv smoke-test read -- just contributes NaN for
+    # that file's columns there, which mean(skipna=True) below ignores.
+    merged = pd.concat(per_file, axis=1)
     log.info(
-        "Loaded %d rows from counts TSV (%d exon rows, %d non-exon rows dropped)",
-        len(df), int(is_exon.sum()), int((~is_exon).sum()),
+        "Merged %d counts TSV(s) into %d exon rows x %d experiment columns",
+        len(counts_tsvs), len(merged), merged.shape[1],
     )
-    df = df.loc[is_exon].copy()
+    avg_count = merged.mean(axis=1, skipna=True)
 
-    count_cols = [c for c in df.columns if c != "ID"]
-    df["avg_count"] = df[count_cols].mean(axis=1)
-
-    df["gene_id"] = df["ID"].map(exon_to_gene)
-    unmapped = int(df["gene_id"].isna().sum())
+    gene_id = avg_count.index.to_series().map(exon_to_gene)
+    unmapped = int(gene_id.isna().sum())
     if unmapped:
         log.warning("%d exon rows had no matching gene in the GFF; dropping", unmapped)
-    df = df.dropna(subset=["gene_id"])
 
+    labels_df = pd.DataFrame({"avg_count": avg_count, "gene_id": gene_id}).dropna(subset=["gene_id"])
     gene_labels = (
-        df.groupby("gene_id")["avg_count"].max().rename("raw_count").reset_index()
+        labels_df.groupby("gene_id")["avg_count"].max().rename("raw_count").reset_index()
     )
     log.info("Aggregated to %d genes with an expression label", len(gene_labels))
     return gene_labels
@@ -135,8 +168,18 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
     )
-    parser.add_argument("--counts-tsv", required=True, help="Per-exon read count TSV (e.g. data/merged_output.tsv)")
-    parser.add_argument("--gff", required=True, help="GFF3 annotation matching the counts TSV's assembly")
+    parser.add_argument(
+        "--counts-tsv", required=True, nargs="+",
+        help="One or more per-exon read count TSVs (e.g. data/expression_7.tsv data/expression_72.tsv "
+             "data/expression_85.tsv). Must share the same exon ID space; treated as separate "
+             "experiment batches and merged by exon ID before averaging.",
+    )
+    parser.add_argument(
+        "--max-rows-per-tsv", type=int, default=None,
+        help="Read only the first N data rows of each --counts-tsv file. These files can be large; "
+             "use this for a fast smoke test instead of the full file.",
+    )
+    parser.add_argument("--gff", required=True, help="GFF3 annotation matching the counts TSVs' assembly")
     parser.add_argument("--fasta", required=True, help="Genome FASTA matching the GFF's assembly")
     parser.add_argument("--window-size", type=int, default=1024, help="Fixed output sequence length in bp")
     parser.add_argument("--val-fraction", type=float, default=0.1, help="Fraction of genes held out for validation")
@@ -145,7 +188,7 @@ def main() -> None:
     args = parser.parse_args()
 
     genes, exon_to_gene = parse_gff(args.gff)
-    gene_labels = load_gene_labels(args.counts_tsv, exon_to_gene)
+    gene_labels = load_gene_labels(args.counts_tsv, exon_to_gene, args.max_rows_per_tsv)
 
     log.info("Loading genome FASTA: %s", args.fasta)
     seqs = {r.id: str(r.seq) for r in tqdm(SeqIO.parse(args.fasta, "fasta"), desc="Reading FASTA")}
