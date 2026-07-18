@@ -42,6 +42,23 @@ set -euo pipefail
 # Disable W&B (TensorBoard is our logging target now).
 export WANDB_DISABLED=true
 
+# Compute the run name ONCE in bash, before launching torchrun. This
+# way every DDP rank inherits the same RUN_NAME env var and they all
+# write to the same `model/<run_name>/` directory. Previously each
+# rank called datetime.now() independently inside Python, which under
+# 8-way parallelism could land on different seconds and create up to
+# 8 sibling directories per launch — confusing and wasteful.
+# RUN_NAME="plantcad2_large_lettuce_$(date +%Y%m%d_%H%M%S)"
+RUN_NAME="plantcad2_large_lettuce_20260623_030324"
+
+# --- Resume from checkpoint -------------------------------------------
+# Set RESUME_FROM to a checkpoint path to continue an interrupted run.
+# Examples:
+#   RESUME_FROM=./model/plantcad2_large_lettuce_20240601_120000/checkpoint-500
+#   RESUME_FROM=latest   (auto-detects last checkpoint in the run dir)
+# When set, OUTPUT_ROOT/RUN_NAME must point at the *same* run directory.
+RESUME_FROM=./model/plantcad2_large_lettuce_20260623_030324/checkpoint-250
+
 # --- Paths ------------------------------------------------------------
 # NOTE: these assume you cd into the plantcad/ repo before running.
 # Use the exact folder name as it sits in model/ — the suffix encodes
@@ -52,13 +69,6 @@ DATASET_PATH="./data/lettuce_hf_dataset_rand8192_50k"
 # Output root for all runs.
 OUTPUT_ROOT="./model"
 
-# Compute the run name ONCE in bash, before launching torchrun. This
-# way every DDP rank inherits the same RUN_NAME env var and they all
-# write to the same `model/<run_name>/` directory. Previously each
-# rank called datetime.now() independently inside Python, which under
-# 8-way parallelism could land on different seconds and create up to
-# 8 sibling directories per launch — confusing and wasteful.
-RUN_NAME="plantcad2_large_lettuce_$(date +%Y%m%d_%H%M%S)"
 echo "Run name: $RUN_NAME"
 echo "Output dir: $OUTPUT_ROOT/$RUN_NAME"
 
@@ -160,7 +170,8 @@ torchrun --nproc_per_node=4 --master_port=29501 \
     $PRECISION_FLAG \
     $MAX_STEPS_FLAG \
     $NUM_EPOCHS_FLAG \
-    $SAMPLE_CAPS
+    $SAMPLE_CAPS \
+    ${RESUME_FROM:+--resume_from_checkpoint "$RESUME_FROM"}
 
 echo ""
 echo "Done. Run directory: ${OUTPUT_ROOT}/${RUN_NAME}"
