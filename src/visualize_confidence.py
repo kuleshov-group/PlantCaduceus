@@ -656,7 +656,7 @@ def visualize_gene(
     sequence: str,
     model_results: list,          # [(model_name, ref_probs_array), ...]
     out_path: str,
-    smooth_window: int = 200,
+    smooth_window: int = 20,
     highlight_regions: list = None,   # [(rel_start, rel_end), ...] in window coords
     regulators: list = None,          # [(reg_type, genomic_start, genomic_end), ...]
 ) -> None:
@@ -713,9 +713,16 @@ def visualize_gene(
     for rel_s, rel_e in regions:
         highlight_mask[rel_s:rel_e] = True
 
+    # Mask for N (ambiguous/masked) bases — smoothed line will be broken here
+    n_mask = np.array([c in "Nn" for c in sequence], dtype=bool)
+
     for i, (model_name, ref_probs) in enumerate(model_results):
         ax = ax_probs[i]
-        smoothed = _smooth(ref_probs, smooth_window)
+        # Set N positions to NaN before smoothing so rolling mean doesn't bridge them
+        probs_masked = ref_probs.copy().astype(float)
+        probs_masked[n_mask] = np.nan
+        smoothed = _smooth(probs_masked, smooth_window)
+        smoothed[n_mask] = np.nan  # ensure N positions stay NaN after rolling fill
 
         _shade_regions(ax, x, gene_start, gene_end, exons)
         # Regulator spans — drawn above exon shading, below confidence lines
@@ -723,9 +730,11 @@ def visualize_gene(
             ax.axvspan(rs, re_, color=reg_color[rtype], alpha=0.45, zorder=2.2)
 
         # Split each signal into normal (blue) and high-confidence (orange) segments
-        # using NaN so matplotlib breaks the line only at region boundaries.
-        raw_normal    = np.where(highlight_mask, np.nan, ref_probs)
+        # using NaN so matplotlib breaks the line at region boundaries and N regions.
+        # `smoothed` already has NaN at N positions from the masking above.
+        raw_normal    = np.where(highlight_mask | n_mask, np.nan, ref_probs)
         raw_high      = np.where(highlight_mask, ref_probs, np.nan)
+        raw_high[n_mask] = np.nan
         smooth_normal = np.where(highlight_mask, np.nan, smoothed)
         smooth_high   = np.where(highlight_mask, smoothed, np.nan)
 
@@ -810,8 +819,8 @@ def parse_args():
                         help="Context window size in bp centered on each gene (default: 8192).")
     parser.add_argument("--batch-size", type=int, default=10,
                         help="Masked sequences per inference batch (default: 32).")
-    parser.add_argument("--smooth-window", type=int, default=200,
-                        help="Rolling-mean window size in bp for the smoothed curve (default: 200).")
+    parser.add_argument("--smooth-window", type=int, default=20,
+                        help="Rolling-mean window size in bp for the smoothed curve (default: 20).")
     parser.add_argument("--n-sigma", type=float, default=1.0,
                         help="High-confidence threshold = mean + n_sigma * std of smoothed signal "
                              "(default: 2.0).")

@@ -3,7 +3,7 @@
 data
 model
 output
-confidence_plots
+confidence_plots*
 
 # Ignored by request
 AGENTS.md

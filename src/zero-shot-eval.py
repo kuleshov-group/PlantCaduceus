@@ -7,6 +7,8 @@ import json
 import logging
 from typing import List, Optional, Sequence
 
+import os
+
 import fire
 import numpy as np
 import pandas as pd
@@ -51,6 +53,14 @@ def _optimal_dtype() -> torch.dtype:
     if major >= 6:
         return torch.float16
     return torch.float32
+
+
+def _mixed_precision() -> str:
+    # The model is always cast to float32 in _load_model (see comment there), so Accelerate
+    # must not re-enable autocast here -- doing so would silently run the forward pass in
+    # bf16/fp16 again and defeat that override (and Mamba2 Triton kernels can't handle
+    # bf16->fp16 conversion on cc<8 hardware).
+    return "no"
 
 
 def _load_model(model_name: str):
@@ -99,7 +109,7 @@ class SingleMaskDataset(Dataset):
             f"token_idx {self.idx} out of range for sequence length {input_ids.size(1)}"
         )
         input_ids[0, self.idx] = self.tok.mask_token_id
-        return {"masked_ids": input_ids}
+        return {"masked_ids": input_ids, "row_idx": i}
 
 
 class MultiMaskDataset(Dataset):
@@ -125,7 +135,7 @@ class MultiMaskDataset(Dataset):
         input_ids = enc["input_ids"]
         assert input_ids.size(1) > max(self.mask_idx), "mask index out of range"
         input_ids[0, self.mask_idx] = self.tok.mask_token_id
-        return {"masked_ids": input_ids}
+        return {"masked_ids": input_ids, "row_idx": i}
 
 
 class UnmaskedDataset(Dataset):
@@ -145,22 +155,41 @@ class UnmaskedDataset(Dataset):
             return_attention_mask=False,
             return_token_type_ids=False,
         )
-        return {"input_ids": enc["input_ids"].squeeze(0)}
+        return {"input_ids": enc["input_ids"].squeeze(0), "row_idx": i}
+
+
+def _gather_ordered(accelerator: Accelerator, per_item: torch.Tensor, row_idx: torch.Tensor) -> np.ndarray:
+    """Gather per-item tensors across processes and restore original dataset order.
+
+    `accelerator.prepare` shards batches round-robin across processes (rank 0 gets batches
+    0, 2, 4, ..., rank 1 gets 1, 3, 5, ...), and pads the last uneven group by duplicating
+    existing rows. A plain `accelerator.gather` + concat therefore returns results grouped by
+    rank, not in dataset order, and may contain duplicate rows. Using `row_idx` (the original
+    dataset index attached by each Dataset) to deduplicate and sort restores the correct order.
+    """
+    per_item = accelerator.gather(per_item).cpu().numpy()
+    row_idx = accelerator.gather(row_idx).cpu().numpy()
+    _, first_occurrence = np.unique(row_idx, return_index=True)
+    return per_item[first_occurrence]
 
 
 def _masked_probs(model, tokenizer, loader, accelerator: Accelerator, desc: str = "Masked logits") -> np.ndarray:
     idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
     all_probs = []
+    all_row_idx = []
     for batch in tqdm(loader, desc=desc, disable=not accelerator.is_local_main_process):
         cur_ids = batch["masked_ids"].squeeze(1)
         with torch.inference_mode():
             logits = model(input_ids=cur_ids).logits
         masked_pos = (cur_ids == tokenizer.mask_token_id).unsqueeze(-1).expand(-1, -1, logits.size(-1))
-        masked_logits = torch.masked_select(logits, masked_pos).view(-1, logits.size(-1))
-        probs = torch.softmax(masked_logits[:, idxs].float(), dim=-1)
+        masked_logits = torch.masked_select(logits, masked_pos).view(cur_ids.size(0), -1, logits.size(-1))
+        probs = torch.softmax(masked_logits[..., idxs].float(), dim=-1)  # [batch, k, 4]
         all_probs.append(probs)
-    all_probs = torch.cat(all_probs, dim=0)
-    return accelerator.gather_for_metrics(all_probs).cpu().numpy()
+        all_row_idx.append(batch["row_idx"].to(probs.device))
+    all_probs = torch.cat(all_probs, dim=0)      # [N_local, k, 4]
+    all_row_idx = torch.cat(all_row_idx, dim=0)  # [N_local]
+    probs = _gather_ordered(accelerator, all_probs, all_row_idx)  # [N_unique, k, 4]
+    return probs.reshape(-1, probs.shape[-1])
 
 
 def _unmasked_probs(loader, model, tokenizer, accelerator: Accelerator, desc: str = "Inference (unmasked)") -> np.ndarray:
@@ -168,6 +197,7 @@ def _unmasked_probs(loader, model, tokenizer, accelerator: Accelerator, desc: st
     idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
     first_len = None
     all_probs = []
+    all_row_idx = []
     for batch in tqdm(loader, desc=desc, disable=not accelerator.is_local_main_process):
         input_ids = batch["input_ids"]
         with torch.inference_mode():
@@ -179,9 +209,10 @@ def _unmasked_probs(loader, model, tokenizer, accelerator: Accelerator, desc: st
         elif probs.shape[1] != first_len:
             raise ValueError(f"All sequences must have same length; got {probs.shape[1]} vs {first_len}")
         all_probs.append(probs)
+        all_row_idx.append(batch["row_idx"].to(probs.device))
     all_probs = torch.cat(all_probs, dim=0)          # [N_local, L, 4]
-    gathered = accelerator.gather_for_metrics(all_probs)  # [N_total, L, 4]
-    return gathered.cpu().numpy()
+    all_row_idx = torch.cat(all_row_idx, dim=0)      # [N_local]
+    return _gather_ordered(accelerator, all_probs, all_row_idx)  # [N_unique, L, 4]
 
 
 def _sv_llr_boundary(
@@ -347,6 +378,7 @@ class ZeroShotEval:
         If `input_tsv` is provided, loads data from local TSV file instead of HuggingFace.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
         accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
@@ -406,6 +438,7 @@ class ZeroShotEval:
         If `input_tsv` is provided, loads data from local TSV file instead of HuggingFace.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
         accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
@@ -421,6 +454,13 @@ class ZeroShotEval:
         # --mask-idx=1,2,3  or  --mask-idx="[1,2,3]"  etc.
         positions = [int(x) for x in mask_idx]
         assert len(positions) == motif_len, "mask_idx count must equal motif_len"
+
+        min_len = max(positions) + 1
+        mask = df[seq_column].str.len() >= min_len
+        n_dropped = (~mask).sum()
+        if n_dropped > 0:
+            logger.warning(f"Dropping {n_dropped} sequences shorter than {min_len} (mask index out of range)")
+            df = df[mask].reset_index(drop=True)
 
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
@@ -480,6 +520,7 @@ class ZeroShotEval:
             raise KeyError(f"Missing required columns: {missing}")
 
         _require_cuda()
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
         accelerator = Accelerator()
         model_, tok = _load_model(model)
 
@@ -532,6 +573,7 @@ class ZeroShotEval:
         Reports AUROC.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
         accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
@@ -547,6 +589,13 @@ class ZeroShotEval:
         # --mask-idx=1,2,3  or  --mask-idx="[1,2,3]"  etc.
         positions = [int(x) for x in mask_idx]
         assert len(positions) == motif_len, "mask_idx count must equal motif_len"
+
+        min_len = max(positions) + 1
+        mask = df[seq_column].str.len() >= min_len
+        n_dropped = (~mask).sum()
+        if n_dropped > 0:
+            logger.warning(f"Dropping {n_dropped} sequences shorter than {min_len} (mask index out of range)")
+            df = df[mask].reset_index(drop=True)
 
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
