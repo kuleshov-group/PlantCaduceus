@@ -32,10 +32,14 @@ run_finetune_v2.sh which centralises paths/hparams.
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import math
 import os
+import shutil
 import sys
+import tempfile
+import warnings
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -45,10 +49,11 @@ import numpy as np
 import torch
 import torch.nn as nn
 from datasets import DatasetDict, load_from_disk
-from peft import LoraConfig, get_peft_model
+from peft import LoraConfig, PeftConfig, PeftModel, get_peft_model
 from transformers import (
     AutoConfig,
     AutoModelForMaskedLM,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     Trainer,
@@ -258,6 +263,77 @@ def wrap_with_lora(
     return model
 
 
+def resolve_base_checkpoint(model_name_or_path: str) -> str:
+    """If `model_name_or_path` is a saved LoRA adapter checkpoint (not a
+    full model), merge it into its base model and return a path to the
+    merged checkpoint instead. This lets --model_name_or_path be pointed
+    at either a plain base model or a previously-trained adapter
+    interchangeably (e.g. continuing pretraining from an earlier
+    completed LoRA run's output).
+
+    Merging (rather than re-attaching the adapter as trainable) bakes the
+    prior adapter's weights into the backbone once, so wrap_with_lora()
+    below can apply a *fresh* adapter on top cleanly. Calling
+    get_peft_model() directly on an already-PEFT-wrapped model instead
+    stacks a second, un-merged adapter (PEFT warns "trying to modify a
+    model with PEFT for a second time") and reproducibly diverges to NaN
+    loss/grad_norm.
+    """
+    adapter_config_path = Path(model_name_or_path) / "adapter_config.json"
+    if not adapter_config_path.exists():
+        return model_name_or_path
+
+    peft_config = PeftConfig.from_pretrained(model_name_or_path)
+    base_path = peft_config.base_model_name_or_path
+    # The base must be loaded with the *same* Auto* wrapper class the adapter
+    # was originally trained against (AutoModelForMaskedLM here, but this
+    # checkpoint could equally have come from lora_fine_tune.py's
+    # AutoModelForSequenceClassification path) -- using the wrong class
+    # doesn't error, PEFT just logs "missing adapter keys" and silently
+    # merges in zero deltas, producing what looks like an untouched base.
+    adapter_cfg = json.loads(adapter_config_path.read_text())
+    base_class_name = (adapter_cfg.get("auto_mapping") or {}).get("base_model_class")
+    auto_cls = {
+        "CaduceusForMaskedLM": AutoModelForMaskedLM,
+        "CaduceusForSequenceClassification": AutoModelForSequenceClassification,
+    }.get(base_class_name)
+    if auto_cls is None:
+        raise ValueError(
+            f"Adapter at {model_name_or_path} has no recognized auto_mapping.base_model_class "
+            f"(got {base_class_name!r}); don't know which model wrapper to merge it "
+            f"against. Add a case for it in resolve_base_checkpoint()."
+        )
+    log.info("Detected LoRA adapter checkpoint at %s (base: %s, trained against %s); merging",
+             model_name_or_path, base_path, base_class_name)
+    base = auto_cls.from_pretrained(base_path, trust_remote_code=True, torch_dtype=torch.float32)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        peft_model = PeftModel.from_pretrained(base, model_name_or_path)
+        if any("missing" in str(w.message).lower() and "key" in str(w.message).lower() for w in caught):
+            raise RuntimeError(
+                f"Loading the adapter at {model_name_or_path} reported missing keys against "
+                f"{auto_cls.__name__} -- the merge would silently be a no-op. The "
+                f"recorded base_model_class ({base_class_name}) may not match how "
+                f"this adapter was actually trained."
+            )
+    merged = peft_model.merge_and_unload()
+
+    merged_dir = tempfile.mkdtemp(prefix="merged_base_")
+    # safe_serialization=False: Caduceus ties lm_head.weight to the input
+    # embedding, which safetensors' shared-tensor check rejects (same reason
+    # the Trainer below is configured with save_safetensors=False).
+    merged.save_pretrained(merged_dir, safe_serialization=False)
+    AutoTokenizer.from_pretrained(base_path, trust_remote_code=True).save_pretrained(merged_dir)
+    # trust_remote_code modeling files aren't always copied by save_pretrained;
+    # make sure they're present so a later from_pretrained(merged_dir) works.
+    for fname in ("configuration_caduceus.py", "modeling_caduceus.py", "modeling_rcps.py"):
+        src, dst = Path(base_path) / fname, Path(merged_dir) / fname
+        if src.exists() and not dst.exists():
+            shutil.copy(src, dst)
+    log.info("Merged checkpoint written to %s (not auto-deleted)", merged_dir)
+    return merged_dir
+
+
 # ----------------------------------------------------------------------
 # Main
 # ----------------------------------------------------------------------
@@ -389,10 +465,11 @@ def main() -> None:
     )
 
     # --- Model + LoRA -------------------------------------------------
-    log.info("Loading base model from %s", args.model_name_or_path)
-    config = AutoConfig.from_pretrained(args.model_name_or_path, trust_remote_code=True)
+    model_name_or_path = resolve_base_checkpoint(args.model_name_or_path)
+    log.info("Loading base model from %s", model_name_or_path)
+    config = AutoConfig.from_pretrained(model_name_or_path, trust_remote_code=True)
     base_model = AutoModelForMaskedLM.from_pretrained(
-        args.model_name_or_path,
+        model_name_or_path,
         config=config,
         trust_remote_code=True,
         torch_dtype=torch.float32,  # Turing-safe; bf16 silently broken on 2080 Ti.
