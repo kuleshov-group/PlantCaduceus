@@ -2,7 +2,7 @@
 ![GitHub Repo stars](https://img.shields.io/github/stars/kuleshov-group/PlantCaduceus)
 ![GitHub Issues or Pull Requests](https://img.shields.io/github/issues/kuleshov-group/PlantCaduceus)
 [![PlantCAD](https://zenodo.org/badge/DOI/10.1073/pnas.2421738122.svg)](https://doi.org/10.1073/pnas.2421738122)
-[![PlantCAD2](https://zenodo.org/badge/DOI/10.1101/2025.08.27.672609.svg)](https://doi.org/10.1101/2025.08.27.672609)
+[![PlantCAD2](https://zenodo.org/badge/DOI/10.1016/j.xgen.2026.101329.svg)](https://doi.org/10.1016/j.xgen.2026.101329)
 ![PlantCAD Downloads](https://img.shields.io/badge/dynamic/json?color=blue&label=PlantCAD&query=downloadsAllTime&url=https://huggingface.co/api/models/kuleshov-group/PlantCaduceus_l32%3Fexpand%3DdownloadsAllTime)
 ![PlantCAD2-Small](https://img.shields.io/badge/dynamic/json?color=blue&label=PlantCAD2-Small&query=downloadsAllTime&url=https://huggingface.co/api/models/kuleshov-group/PlantCAD2-Small-l24-d0768%3Fexpand%3DdownloadsAllTime)
 ![PlantCAD2-Medium](https://img.shields.io/badge/dynamic/json?color=blue&label=PlantCAD2-Medium&query=downloadsAllTime&url=https://huggingface.co/api/models/kuleshov-group/PlantCAD2-Medium-l48-d1024%3Fexpand%3DdownloadsAllTime)
@@ -14,7 +14,7 @@
   <img src="img/logo.jpg" alt="logo" width="20%">
 </p>
 
-## 🚀 [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) is here! ([paper](https://www.biorxiv.org/content/10.1101/2025.08.27.672609v3))
+## 🚀 [PlantCAD2](https://huggingface.co/collections/kuleshov-group/plantcad2-67e437e241a382671371a572) is now published in *[Cell Genomics](https://www.cell.com/cell-genomics/fulltext/S2666-979X(26)00191-6)*!
 
 A new DNA foundation model for angiosperms, with [LoRA fine-tuned models](https://huggingface.co/collections/plantcad/fine-tuned-plantcad2-models-68b316a57616134fa7a1b6b6) for accessible chromatin, gene expression, and protein translation.
 
@@ -166,10 +166,10 @@ See `notebooks/examples.ipynb` for more detailed examples.
 
 ## Citations
 
-If you find PlantCAD useful for your research, please consider citing our paper:
+If you find PlantCAD useful for your research, please consider citing our papers:
 
 - Zhai, J., Gokaslan, A., Schiff, Y., Berthel, A., Liu, Z. Y., Lai, W. L., Miller, Z. R., Scheben, A., Stitzer, M. C., Romay, M. C., Buckler, E. S., & Kuleshov, V. (2025). Cross-species modeling of plant genomes at single nucleotide resolution using a pretrained DNA language model. Proceedings of the National Academy of Sciences, 122(24), e2421738122. https://doi.org/10.1073/pnas.2421738122
-- Zhai J., Gokaslan A., Hsu SK., Chen SP., Liu ZY., Marroquin E., Czech E., Cannon B., Berthel A., Romay MC., Pennell M., Kuleshov V.* Buckler ES*. PlantCAD2: A Long-Context DNA Language Model for Cross-Species Functional Annotation in Angiosperms. bioRxiv. 2025. Nov 19. doi: https://doi.org/10.1101/2025.08.27.672609
+- Zhai, J., Gokaslan, A., Hsu, S.-K., Chen, S.-P., Liu, Z.-Y., Marroquin, E., Czech, E., Cannon, B., Berthel, A., Romay, M. C., Pennell, M., Kuleshov, V., & Buckler, E. S. (2026). PlantCAD2: A DNA foundation model for interpreting genomes across flowering plants. Cell Genomics, 101329. https://doi.org/10.1016/j.xgen.2026.101329
 
 ## Contact
 
