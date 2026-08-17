@@ -397,6 +397,10 @@ def train(
     if use_wandb:
         os.environ["WANDB_PROJECT"] = wandb_project
 
+    # Always log to TensorBoard (matches HF_pre_train_lora.py's convention, see
+    # INSTRUCTIONS.md), in addition to wandb if requested.
+    report_to = ["tensorboard"] + (["wandb"] if use_wandb else [])
+
     training_args = TrainingArguments(
         output_dir=output_dir,
         learning_rate=learning_rate,
@@ -414,7 +418,8 @@ def train(
         save_strategy=save_strategy,
         save_steps=save_steps,
         logging_steps=logging_steps,
-        report_to="none" if not use_wandb else "wandb",
+        report_to=report_to,
+        logging_dir=os.path.join(output_dir, "tensorboard"),
         run_name=wandb_run_name,
         remove_unused_columns=remove_unused_columns,
         save_total_limit=5,

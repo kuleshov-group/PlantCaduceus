@@ -49,7 +49,7 @@ export WANDB_DISABLED=true
 # 8-way parallelism could land on different seconds and create up to
 # 8 sibling directories per launch — confusing and wasteful.
 # RUN_NAME="plantcad2_large_lettuce_$(date +%Y%m%d_%H%M%S)"
-RUN_NAME="plantcad2_large_lettuce_20260623_030324"
+RUN_NAME="plantcad2_large_lettuce_20260719_010455"
 
 # --- Resume from checkpoint -------------------------------------------
 # Set RESUME_FROM to a checkpoint path to continue an interrupted run.
@@ -57,7 +57,7 @@ RUN_NAME="plantcad2_large_lettuce_20260623_030324"
 #   RESUME_FROM=./model/plantcad2_large_lettuce_20240601_120000/checkpoint-500
 #   RESUME_FROM=latest   (auto-detects last checkpoint in the run dir)
 # When set, OUTPUT_ROOT/RUN_NAME must point at the *same* run directory.
-RESUME_FROM=./model/plantcad2_large_lettuce_20260623_030324/checkpoint-250
+RESUME_FROM=./model/plantcad2_large_lettuce_20260719_010455/checkpoint-743
 
 # --- Paths ------------------------------------------------------------
 # NOTE: these assume you cd into the plantcad/ repo before running.
@@ -75,7 +75,7 @@ echo "Output dir: $OUTPUT_ROOT/$RUN_NAME"
 # --- Hyperparameters --------------------------------------------------
 # LoRA wants a higher LR than full fine-tune; 1e-3 is the canonical
 # starting point in the PEFT examples.
-LEARNING_RATE=1e-3
+LEARNING_RATE=5e-4
 WARMUP_STEPS=250
 LR_SCHEDULER="cosine"
 
@@ -91,7 +91,7 @@ GRAD_ACCUM=16
 # Ti's sm_75 (Turing). fp32 path through the same kernel DOES compile
 # on sm_75; we just can't afford 8192 bp activations in 11 GB. We deal
 # with that by truncating sequences (see MAX_SEQ_LENGTH below).
-PRECISION_FLAG="--fp16"
+PRECISION_FLAG="--bf16"
 
 # Sequence-length cap. Dataset chunks are 8192 bp, but at fp32 on a
 # 2080 Ti the full length OOMs. We worked down: 8192 OOM, 4096 OOM,
@@ -130,9 +130,9 @@ if [[ "$SANITY" == "1" ]]; then
     SAVE_STEPS=30
     LOGGING_STEPS=3
 else
-    echo "=== FULL RUN: ~1 epoch over 50k samples ==="
+    echo "=== FULL RUN: ~5 epochs over 50k samples ==="
     MAX_STEPS_FLAG=""                       # let num_train_epochs decide
-    NUM_EPOCHS_FLAG="--num_train_epochs 1"
+    NUM_EPOCHS_FLAG="--num_train_epochs 5"
     SAMPLE_CAPS=""
     EVAL_STEPS=100
     SAVE_STEPS=250

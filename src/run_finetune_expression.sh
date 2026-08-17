@@ -31,6 +31,10 @@
 #   3. Full run:
 #        bash src/run_finetune_expression.sh
 #
+#   4. To resume an interrupted run, set RESUME_FROM to a checkpoint path
+#      and RUN_NAME to the same run directory it lives under (see the
+#      "Resume from checkpoint" section below).
+#
 # Hardware knobs (env-var overridable, defaults below match this repo's
 # 2080 Ti box). Labels are log1p(count) (see build_expression_dataset.py);
 # lora_fine_tune.py predict's `predicted_value` column is therefore in
@@ -47,11 +51,21 @@ export WANDB_DISABLED=true
 
 # --- Paths --------------------------------------------------------------
 # NOTE: these assume you cd into the plantcad/ repo before running.
-MODEL_PATH="${MODEL_PATH:-./model/PlantCAD2-Small-l24-d0768}"
+MODEL_PATH="${MODEL_PATH:-./model/plantcad2_large_lettuce_20260719_010455}"
 DATA_PREFIX="${DATA_PREFIX:-./data/expression_dataset}"
 OUTPUT_ROOT="${OUTPUT_ROOT:-./model}"
 
-RUN_NAME="plantcad2_lettuce_expression_$(date +%Y%m%d_%H%M%S)"
+# --- Resume from checkpoint -------------------------------------------
+# Set RESUME_FROM to a checkpoint path to continue an interrupted run, and
+# RUN_NAME to the *same* run directory name that checkpoint lives under
+# (RUN_NAME defaults to a fresh timestamp otherwise, which would start a
+# new run dir instead of continuing the old one). Example:
+#   RESUME_FROM=./model/plantcad2_lettuce_expression_20260720_101500/checkpoint-500 \
+#   RUN_NAME=plantcad2_lettuce_expression_20260720_101500 \
+#   bash src/run_finetune_expression.sh
+RESUME_FROM="${RESUME_FROM:-}"
+
+RUN_NAME="${RUN_NAME:-plantcad2_lettuce_expression_$(date +%Y%m%d_%H%M%S)}"
 echo "Run name: $RUN_NAME"
 echo "Output dir: $OUTPUT_ROOT/$RUN_NAME"
 
@@ -173,10 +187,15 @@ fi
     --logging_steps "$LOGGING_STEPS" \
     --seed "$SEED" \
     $MAX_STEPS_FLAG \
-    --remove_unused_columns False
+    --remove_unused_columns False \
+    ${RESUME_FROM:+--resume_from_checkpoint "$RESUME_FROM"}
 
 echo ""
 echo "Done. Run directory: $OUTPUT_ROOT/$RUN_NAME"
+echo ""
+echo "TensorBoard logs: $OUTPUT_ROOT/$RUN_NAME/tensorboard/"
+echo "  View with:  tensorboard --logdir $OUTPUT_ROOT/"
+echo "  (requires 'pip install tensorboard' once per container, per src/INSTRUCTIONS.md)"
 echo ""
 echo "To predict on new tokenized data and recover integer counts:"
 echo "  python src/lora_fine_tune.py predict --checkpoint_dir $OUTPUT_ROOT/$RUN_NAME \\"
