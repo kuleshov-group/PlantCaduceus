@@ -16,9 +16,14 @@
 # How to run:
 #   1. (one-time) Build the (sequence, label) TSVs. --counts-tsv accepts one or
 #      more per-exon count TSVs sharing the same exon ID space (e.g. separate
-#      studies); their experiment columns are merged and averaged together:
+#      studies), each paired positionally with a --metadata-csv describing its
+#      experiment columns (Run,time_point,tissue,treatment). Columns are first
+#      filtered to --treatment (default "Mock inoculation"), averaged within
+#      each time_point (averaging over tissue/replicate/study), then
+#      integrated over time_point (AUC) per exon:
 #        python src/scripts/build_expression_dataset.py \
-#            --counts-tsv data/expression_7.tsv data/expression_72.tsv data/expression_85.tsv \
+#            --counts-tsv data/expression_72.tsv data/expression_85.tsv \
+#            --metadata-csv data/MetaData_72.csv data/MetaData_85.csv \
 #            --gff data/GCF_002870075.5_Lsat_Salinas_v15_genomic.gff \
 #            --fasta data/GCF_002870075.5_Lsat_Salinas_v15_genomic.fna \
 #            --output-prefix data/expression_dataset
