@@ -1,3 +1,10 @@
+# Inputs and outputs
+.hf_home
+data
+model
+output
+confidence_plots*
+
 # Ignored by request
 AGENTS.md
 tmp/

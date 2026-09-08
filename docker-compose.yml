@@ -1,0 +1,18 @@
+services:
+  plantcad:
+    image: ghcr.io/plantcad/plantcad:v1.1.0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - .:/workspace
+      - /mnt/data1/shared/plantcad:/mnt/data1/shared/plantcad
+    working_dir: /workspace
+    command: >
+      sh -c "pip install --no-cache-dir fire && /bin/bash"
+    tty: true
+    stdin_open: true

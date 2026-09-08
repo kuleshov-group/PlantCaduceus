@@ -1,5 +1,6 @@
 import pandas as pd
 import torch
+from accelerate import Accelerator
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
@@ -94,6 +95,8 @@ class SequenceDataset(Dataset):
 
 def load_model_and_tokenizer(model_dir, device):
     logging.info(f"Loading model and tokenizer from {model_dir}")
+    n_gpus = torch.cuda.device_count()
+    logging.info(f"Using {n_gpus} GPU(s) for inference.")
 
     # Determine the appropriate dtype based on the GPU capabilities
     def get_optimal_dtype():
@@ -116,21 +119,25 @@ def load_model_and_tokenizer(model_dir, device):
 
     optimal_dtype = get_optimal_dtype()
 
-    # Load the model with the selected dtype
+    # Load the model with the selected dtype, distributed across all available GPUs
     try:
-        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, torch_dtype=optimal_dtype)
+        model = AutoModelForMaskedLM.from_pretrained(
+            model_dir, trust_remote_code=True, torch_dtype=optimal_dtype, device_map="auto"
+        )
         # Note: We set dtype in two places because some transformers versions are inconsistent in
         # honoring torch_dtype during from_pretrained. See:
         # https://github.com/huggingface/transformers/issues/36567
         # Passing torch_dtype here and also calling model.to(dtype) below ensures correctness across
         # versions; when from_pretrained respects torch_dtype, the subsequent .to(dtype) is a no-op.
-        model.to(optimal_dtype)
+        # model.to(optimal_dtype)
+        model.to(torch.float32)  # temporary due to hardware compatibility issues
     except Exception as e:
         logging.error(f"Failed to load model with {optimal_dtype}, falling back to float32. Error: {e}")
-        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, torch_dtype=torch.float32)
+        model = AutoModelForMaskedLM.from_pretrained(
+            model_dir, trust_remote_code=True, torch_dtype=torch.float32, device_map="auto"
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
-    model.to(device)
     return model, tokenizer
 
 
@@ -456,17 +463,20 @@ def main():
             args.contextSize = FIXED_CTX
             args.tokenIdx = args.contextSize // 2 - 1
 
+    accelerator = Accelerator()
+    device = accelerator.device
+
     # Determine workflow based on input type
     if args.inputVCF is not None:
         # VCF-based zero-shot scoring workflow
         sequences, recordIndices = seq_from_vcf(args)
 
-        model, tokenizer = load_model_and_tokenizer(args.model, args.device)
+        model, tokenizer = load_model_and_tokenizer(args.model, device)
 
         logging.info("Creating data loader")
         loader = create_dataloader(sequences, tokenizer, args.batchSize, args.tokenIdx)
 
-        logits = extract_logits(model, loader, args.device, args.tokenIdx, tokenizer)
+        logits = extract_logits(model, loader, device, args.tokenIdx, tokenizer)
 
         zero_shot_score_vcf(args, recordIndices, logits)
         logging.info(f"Zero-shot scores saved to {args.output}")
@@ -474,7 +484,7 @@ def main():
     elif args.inputBed is not None:
         # BED-based genome-wide LLR scoring workflow
         logging.info("Starting genome-wide LLR scoring workflow.")
-        
+
         # Load reference genome and BED file
         fasta_dict = load_fasta(args.inputFasta)
         bed_df = load_bed_file(args.inputBed)
@@ -487,14 +497,14 @@ def main():
             sys.exit(1)
 
         # Load model and tokenizer
-        model, tokenizer = load_model_and_tokenizer(args.model, args.device)
+        model, tokenizer = load_model_and_tokenizer(args.model, device)
 
         # Create dataloader with BED-specific settings
         loader = create_dataloader(sequences, tokenizer, args.batchSize, args.tokenIdx,
                                    args.stepSize, args.useMasking)
 
         # Extract logits/probabilities
-        probs = extract_logits(model, loader, args.device, args.tokenIdx, tokenizer, 
+        probs = extract_logits(model, loader, device, args.tokenIdx, tokenizer,
                                args.stepSize, window_sizes)
 
         # Calculate LLRs

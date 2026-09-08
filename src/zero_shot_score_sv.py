@@ -1,5 +1,6 @@
 import pandas as pd
 import torch
+from accelerate import Accelerator
 from transformers import AutoModelForMaskedLM, AutoTokenizer
 from torch.utils.data import Dataset, DataLoader
 import numpy as np
@@ -58,6 +59,8 @@ class SequenceDataset(Dataset):
 
 def load_model_and_tokenizer(model_dir, device):
     logging.info(f"Loading model and tokenizer from {model_dir}")
+    n_gpus = torch.cuda.device_count()
+    logging.info(f"Using {n_gpus} GPU(s) for inference.")
 
     def get_optimal_dtype():
         if not torch.cuda.is_available():
@@ -74,14 +77,17 @@ def load_model_and_tokenizer(model_dir, device):
     optimal_dtype = get_optimal_dtype()
 
     try:
-        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, torch_dtype=optimal_dtype)
+        model = AutoModelForMaskedLM.from_pretrained(
+            model_dir, trust_remote_code=True, torch_dtype=optimal_dtype, device_map="auto"
+        )
         model.to(optimal_dtype)
     except Exception as e:
         logging.error(f"Failed to load model with {optimal_dtype}, falling back to float32. Error: {e}")
-        model = AutoModelForMaskedLM.from_pretrained(model_dir, trust_remote_code=True, torch_dtype=torch.float32)
+        model = AutoModelForMaskedLM.from_pretrained(
+            model_dir, trust_remote_code=True, torch_dtype=torch.float32, device_map="auto"
+        )
 
     tokenizer = AutoTokenizer.from_pretrained(model_dir, trust_remote_code=True)
-    model.to(device)
     return model, tokenizer
 
 
@@ -377,17 +383,19 @@ def main():
         sys.exit(0)
 
     # Load Model
-    model, tokenizer = load_model_and_tokenizer(args.model, args.device)
+    accelerator = Accelerator()
+    device = accelerator.device
+    model, tokenizer = load_model_and_tokenizer(args.model, device)
 
     # Inference on Ref
     logging.info("Running inference on Reference Sequences...")
     ref_loader = create_dataloader(ref_seqs, tokenizer, args.batchSize)
-    ref_probs = extract_logits_at_indices(model, ref_loader, args.device, tokenizer, ref_indices)
-    
+    ref_probs = extract_logits_at_indices(model, ref_loader, device, tokenizer, ref_indices)
+
     # Inference on Mut
     logging.info("Running inference on Mutated Sequences...")
     mut_loader = create_dataloader(mut_seqs, tokenizer, args.batchSize)
-    mut_probs = extract_logits_at_indices(model, mut_loader, args.device, tokenizer, mut_indices)
+    mut_probs = extract_logits_at_indices(model, mut_loader, device, tokenizer, mut_indices)
     
     # Calculate Scores and Write Output
     logging.info(f"Calculating scores and writing to {args.output}")

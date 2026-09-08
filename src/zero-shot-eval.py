@@ -7,10 +7,13 @@ import json
 import logging
 from typing import List, Optional, Sequence
 
+import os
+
 import fire
 import numpy as np
 import pandas as pd
 import torch
+from accelerate import Accelerator
 from datasets import load_dataset
 from sklearn.metrics import roc_curve, auc, average_precision_score
 from torch.utils.data import Dataset, DataLoader
@@ -26,18 +29,19 @@ NUCLEOTIDES_LOWER = tuple(n.lower() for n in NUCLEOTIDES)
 NUCLEOTIDE_TO_INDEX = {b: i for i, b in enumerate(NUCLEOTIDES)}
 
 
-def _require_cuda(device: str) -> str:
-    """Validate that CUDA is available and the requested device is CUDA.
+def _require_cuda() -> None:
+    """Validate that CUDA is available.
 
     This script requires a CUDA-capable GPU. CPU execution is not supported to avoid
     unintended slowdowns or dtype/device mismatches.
     """
-    if not (torch.cuda.is_available() and device.startswith("cuda")):
+    if not torch.cuda.is_available():
         raise RuntimeError(
             "CUDA is required for zero-shot evaluation; CPU is not supported. "
-            "Set -device cuda:0 and ensure a CUDA GPU is available."
+            "Ensure a CUDA GPU is available."
         )
-    return device
+    n = torch.cuda.device_count()
+    logger.info("Using %d GPU(s) for inference.", n)
 
 
 def _optimal_dtype() -> torch.dtype:
@@ -51,7 +55,15 @@ def _optimal_dtype() -> torch.dtype:
     return torch.float32
 
 
-def _load_model(model_name: str, device: str):
+def _mixed_precision() -> str:
+    # The model is always cast to float32 in _load_model (see comment there), so Accelerate
+    # must not re-enable autocast here -- doing so would silently run the forward pass in
+    # bf16/fp16 again and defeat that override (and Mamba2 Triton kernels can't handle
+    # bf16->fp16 conversion on cc<8 hardware).
+    return "no"
+
+
+def _load_model(model_name: str):
     dtype = _optimal_dtype()
     logger.warning(
         "Loading model with dtype %s (no auto-fallback). Incompatible weights or kernels may error.",
@@ -65,9 +77,9 @@ def _load_model(model_name: str, device: str):
     # https://github.com/huggingface/transformers/issues/36567
     # Passing torch_dtype here and also calling model.to(dtype) below ensures correctness across
     # versions; when from_pretrained respects torch_dtype, the subsequent .to(dtype) is a no-op.
-    model.to(dtype)
+    # model.to(dtype)
+    model.to(torch.float32)  # temporary due to hardware compatibility issues
     tok = AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
-    model.to(device)
     model.eval()
     return model, tok
 
@@ -97,7 +109,7 @@ class SingleMaskDataset(Dataset):
             f"token_idx {self.idx} out of range for sequence length {input_ids.size(1)}"
         )
         input_ids[0, self.idx] = self.tok.mask_token_id
-        return {"masked_ids": input_ids}
+        return {"masked_ids": input_ids, "row_idx": i}
 
 
 class MultiMaskDataset(Dataset):
@@ -123,59 +135,84 @@ class MultiMaskDataset(Dataset):
         input_ids = enc["input_ids"]
         assert input_ids.size(1) > max(self.mask_idx), "mask index out of range"
         input_ids[0, self.mask_idx] = self.tok.mask_token_id
-        return {"masked_ids": input_ids}
+        return {"masked_ids": input_ids, "row_idx": i}
 
 
-def _masked_probs(model, tokenizer, loader: DataLoader, device: str, desc: str = "Masked logits") -> np.ndarray:
-    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
-    all_probs = []
-    for batch in tqdm(loader, desc=desc):
-        cur_ids = batch["masked_ids"].to(device).squeeze(1)
-        with torch.inference_mode():
-            logits = model(input_ids=cur_ids).logits
-        masked_pos = (cur_ids == tokenizer.mask_token_id).unsqueeze(-1).expand(-1, -1, logits.size(-1))
-        masked_logits = torch.masked_select(logits, masked_pos).view(-1, logits.size(-1))
-        probs = torch.softmax(masked_logits[:, idxs].float(), dim=-1).cpu().numpy()
-        all_probs.append(probs)
-    return np.vstack(all_probs)
+class UnmaskedDataset(Dataset):
+    def __init__(self, sequences: pd.Series, tokenizer):
+        self.seqs = sequences.astype(str).tolist()
+        self.tok = tokenizer
 
+    def __len__(self):
+        return len(self.seqs)
 
-def _unmasked_probs(
-    sequences: pd.Series,
-    tokenizer,
-    model,
-    device: str,
-    batch_size: int,
-    desc: str = "Inference (unmasked)",
-) -> np.ndarray:
-    """Per-position probabilities over A,C,G,T for each sequence. Shape: [N, L, 4]."""
-    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
-    seqs = sequences.astype(str).tolist()
-    first_len = None
-    all_probs = None
-    for i in tqdm(range(0, len(seqs), batch_size), desc=desc):
-        batch = seqs[i : i + batch_size]
-        enc = tokenizer(
-            batch,
+    def __getitem__(self, i: int):
+        enc = self.tok(
+            self.seqs[i],
             truncation=False,
             padding=False,
             return_tensors="pt",
             return_attention_mask=False,
             return_token_type_ids=False,
         )
-        input_ids = enc["input_ids"].to(device)
+        return {"input_ids": enc["input_ids"].squeeze(0), "row_idx": i}
+
+
+def _gather_ordered(accelerator: Accelerator, per_item: torch.Tensor, row_idx: torch.Tensor) -> np.ndarray:
+    """Gather per-item tensors across processes and restore original dataset order.
+
+    `accelerator.prepare` shards batches round-robin across processes (rank 0 gets batches
+    0, 2, 4, ..., rank 1 gets 1, 3, 5, ...), and pads the last uneven group by duplicating
+    existing rows. A plain `accelerator.gather` + concat therefore returns results grouped by
+    rank, not in dataset order, and may contain duplicate rows. Using `row_idx` (the original
+    dataset index attached by each Dataset) to deduplicate and sort restores the correct order.
+    """
+    per_item = accelerator.gather(per_item).cpu().numpy()
+    row_idx = accelerator.gather(row_idx).cpu().numpy()
+    _, first_occurrence = np.unique(row_idx, return_index=True)
+    return per_item[first_occurrence]
+
+
+def _masked_probs(model, tokenizer, loader, accelerator: Accelerator, desc: str = "Masked logits") -> np.ndarray:
+    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
+    all_probs = []
+    all_row_idx = []
+    for batch in tqdm(loader, desc=desc, disable=not accelerator.is_local_main_process):
+        cur_ids = batch["masked_ids"].squeeze(1)
+        with torch.inference_mode():
+            logits = model(input_ids=cur_ids).logits
+        masked_pos = (cur_ids == tokenizer.mask_token_id).unsqueeze(-1).expand(-1, -1, logits.size(-1))
+        masked_logits = torch.masked_select(logits, masked_pos).view(cur_ids.size(0), -1, logits.size(-1))
+        probs = torch.softmax(masked_logits[..., idxs].float(), dim=-1)  # [batch, k, 4]
+        all_probs.append(probs)
+        all_row_idx.append(batch["row_idx"].to(probs.device))
+    all_probs = torch.cat(all_probs, dim=0)      # [N_local, k, 4]
+    all_row_idx = torch.cat(all_row_idx, dim=0)  # [N_local]
+    probs = _gather_ordered(accelerator, all_probs, all_row_idx)  # [N_unique, k, 4]
+    return probs.reshape(-1, probs.shape[-1])
+
+
+def _unmasked_probs(loader, model, tokenizer, accelerator: Accelerator, desc: str = "Inference (unmasked)") -> np.ndarray:
+    """Per-position probabilities over A,C,G,T for each sequence. Shape: [N, L, 4]."""
+    idxs = [tokenizer.get_vocab()[n] for n in NUCLEOTIDES_LOWER]
+    first_len = None
+    all_probs = []
+    all_row_idx = []
+    for batch in tqdm(loader, desc=desc, disable=not accelerator.is_local_main_process):
+        input_ids = batch["input_ids"]
         with torch.inference_mode():
             out = model(input_ids=input_ids)
         logits = out.logits[..., idxs]
-        probs = torch.softmax(logits.float(), dim=-1).cpu().numpy()
+        probs = torch.softmax(logits.float(), dim=-1)
         if first_len is None:
             first_len = probs.shape[1]
-            all_probs = np.zeros((len(seqs), first_len, 4), dtype=np.float32)
-        else:
-            if probs.shape[1] != first_len:
-                raise ValueError(f"All sequences must have same length; got {probs.shape[1]} vs {first_len}")
-        all_probs[i : i + len(batch), :, :] = probs
-    return all_probs
+        elif probs.shape[1] != first_len:
+            raise ValueError(f"All sequences must have same length; got {probs.shape[1]} vs {first_len}")
+        all_probs.append(probs)
+        all_row_idx.append(batch["row_idx"].to(probs.device))
+    all_probs = torch.cat(all_probs, dim=0)          # [N_local, L, 4]
+    all_row_idx = torch.cat(all_row_idx, dim=0)      # [N_local]
+    return _gather_ordered(accelerator, all_probs, all_row_idx)  # [N_unique, L, 4]
 
 
 def _sv_llr_boundary(
@@ -327,7 +364,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         token_idx: int = 255,
         batch_size: int = 128,
         seq_column: str = "sequence",
@@ -342,6 +378,8 @@ class ZeroShotEval:
         If `input_tsv` is provided, loads data from local TSV file instead of HuggingFace.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
+        accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
             logger.info(f"Loading data from local TSV: {input_tsv}")
@@ -354,12 +392,13 @@ class ZeroShotEval:
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
-            dev = _require_cuda(device)
-            model_, tok = _load_model(model, dev)
+            _require_cuda()
+            model_, tok = _load_model(model)
             dataset = SingleMaskDataset(df[seq_column], tok, token_idx)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits @ {token_idx}")
-            if save_logits:
+            model_, loader = accelerator.prepare(model_, loader)
+            probs = _masked_probs(model_, tok, loader, accelerator, desc=f"Masked logits @ {token_idx}")
+            if save_logits and accelerator.is_main_process:
                 pd.DataFrame(probs, columns=list(NUCLEOTIDES)).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
@@ -370,9 +409,9 @@ class ZeroShotEval:
         y_true = df["label"].astype(int).to_numpy()
         pr_scores = _refprob_scores(df, probs, token_idx, seq_column)
         auprc = float(average_precision_score(y_true, pr_scores))
-        print(f"AUROC\t{roc_auc:.6f}")
-        print(f"AUPRC\t{auprc:.6f}")
-        if metrics_json:
+        accelerator.print(f"AUROC\t{roc_auc:.6f}")
+        accelerator.print(f"AUPRC\t{auprc:.6f}")
+        if metrics_json and accelerator.is_main_process:
             with open(metrics_json, "w") as f:
                 json.dump({"auroc": roc_auc, "auprc": auprc, "token_idx": token_idx}, f, indent=2)
 
@@ -383,7 +422,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         mask_idx: Sequence[int] = (255, 256, 257),
         motif_len: int = 3,
         batch_size: int = 128,
@@ -400,6 +438,8 @@ class ZeroShotEval:
         If `input_tsv` is provided, loads data from local TSV file instead of HuggingFace.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
+        accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
             logger.info(f"Loading data from local TSV: {input_tsv}")
@@ -415,15 +455,23 @@ class ZeroShotEval:
         positions = [int(x) for x in mask_idx]
         assert len(positions) == motif_len, "mask_idx count must equal motif_len"
 
+        min_len = max(positions) + 1
+        mask = df[seq_column].str.len() >= min_len
+        n_dropped = (~mask).sum()
+        if n_dropped > 0:
+            logger.warning(f"Dropping {n_dropped} sequences shorter than {min_len} (mask index out of range)")
+            df = df[mask].reset_index(drop=True)
+
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
-            dev = _require_cuda(device)
-            model_, tok = _load_model(model, dev)
+            _require_cuda()
+            model_, tok = _load_model(model)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits motif_len={motif_len}")
-            if save_logits:
+            model_, loader = accelerator.prepare(model_, loader)
+            probs = _masked_probs(model_, tok, loader, accelerator, desc=f"Masked logits motif_len={motif_len}")
+            if save_logits and accelerator.is_main_process:
                 pd.DataFrame(probs, columns=list(NUCLEOTIDES)).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
@@ -432,9 +480,9 @@ class ZeroShotEval:
         true_tokens = _compute_true_tokens_from_seq(df[seq_column], positions)
         token_acc = _metric_token_accuracy(probs, true_tokens)
         motif_acc = _metric_motif_accuracy(probs, true_tokens, motif_len)
-        print(f"token_accuracy\t{token_acc:.6f}")
-        print(f"motif_accuracy\t{motif_acc:.6f}")
-        if metrics_json:
+        accelerator.print(f"token_accuracy\t{token_acc:.6f}")
+        accelerator.print(f"motif_accuracy\t{motif_acc:.6f}")
+        if metrics_json and accelerator.is_main_process:
             with open(metrics_json, "w") as f:
                 json.dump({"token_accuracy": token_acc, "motif_accuracy": motif_acc}, f, indent=2)
 
@@ -444,7 +492,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         batch_size: int = 64,
         flanking: int = 5,
         output: Optional[str] = None,
@@ -472,24 +519,31 @@ class ZeroShotEval:
         if missing:
             raise KeyError(f"Missing required columns: {missing}")
 
-        dev = _require_cuda(device)
-        model_, tok = _load_model(model, dev)
+        _require_cuda()
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
+        accelerator = Accelerator()
+        model_, tok = _load_model(model)
 
-        # Unmasked probabilities
-        ref_probs = _unmasked_probs(df["RefSeq"], tok, model_, dev, batch_size, desc="Ref (unmasked)")
-        mut_probs = _unmasked_probs(df["MutSeq"], tok, model_, dev, batch_size, desc="Mut (unmasked)")
+        ref_dataset = UnmaskedDataset(df["RefSeq"], tok)
+        mut_dataset = UnmaskedDataset(df["MutSeq"], tok)
+        ref_loader = DataLoader(ref_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+        mut_loader = DataLoader(mut_dataset, batch_size=batch_size, shuffle=False, num_workers=1)
+        model_, ref_loader, mut_loader = accelerator.prepare(model_, ref_loader, mut_loader)
 
-        if save_ref_logits:
+        ref_probs = _unmasked_probs(ref_loader, model_, tok, accelerator, desc="Ref (unmasked)")
+        mut_probs = _unmasked_probs(mut_loader, model_, tok, accelerator, desc="Mut (unmasked)")
+
+        if save_ref_logits and accelerator.is_main_process:
             np.savez_compressed(save_ref_logits, logits=ref_probs)
-        if save_mut_logits:
+        if save_mut_logits and accelerator.is_main_process:
             np.savez_compressed(save_mut_logits, logits=mut_probs)
 
         scores = _sv_llr_boundary(df, ref_probs, mut_probs, flanking)
         y_true = df["label"].astype(int).to_numpy()
         auprc = float(average_precision_score(y_true, scores))
-        print(f"AUPRC\t{auprc:.6f}")
+        accelerator.print(f"AUPRC\t{auprc:.6f}")
 
-        if output:
+        if output and accelerator.is_main_process:
             out_df = df.copy()
             out_df["score"] = scores
             out_df = out_df.drop(columns=["Left5_Positions", "Right5_Positions"], errors="ignore")
@@ -501,7 +555,6 @@ class ZeroShotEval:
         task: str = "",
         split: str = "valid",
         model: str = "kuleshov-group/PlantCAD2-Small-l24-d0768",
-        device: str = "cuda:0",
         mask_idx: Sequence[int] = (255, 256, 257),
         motif_len: int = 3,
         batch_size: int = 128,
@@ -520,6 +573,8 @@ class ZeroShotEval:
         Reports AUROC.
         """
         logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+        os.environ["ACCELERATE_MIXED_PRECISION"] = _mixed_precision()
+        accelerator = Accelerator()
         logger.info("Loading dataset")
         if input_tsv:
             logger.info(f"Loading data from local TSV: {input_tsv}")
@@ -535,15 +590,23 @@ class ZeroShotEval:
         positions = [int(x) for x in mask_idx]
         assert len(positions) == motif_len, "mask_idx count must equal motif_len"
 
+        min_len = max(positions) + 1
+        mask = df[seq_column].str.len() >= min_len
+        n_dropped = (~mask).sum()
+        if n_dropped > 0:
+            logger.warning(f"Dropping {n_dropped} sequences shorter than {min_len} (mask index out of range)")
+            df = df[mask].reset_index(drop=True)
+
         if logits_path is not None:
             probs = pd.read_csv(logits_path, sep="\t").values
         else:
-            dev = _require_cuda(device)
-            model_, tok = _load_model(model, dev)
+            _require_cuda()
+            model_, tok = _load_model(model)
             dataset = MultiMaskDataset(df[seq_column], tok, positions)
             loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=1)
-            probs = _masked_probs(model_, tok, loader, dev, desc=f"Masked logits (core/non-core) motif_len={motif_len}")
-            if save_logits:
+            model_, loader = accelerator.prepare(model_, loader)
+            probs = _masked_probs(model_, tok, loader, accelerator, desc=f"Masked logits (core/non-core) motif_len={motif_len}")
+            if save_logits and accelerator.is_main_process:
                 pd.DataFrame(probs, columns=["A", "C", "G", "T"]).to_csv(save_logits, sep="\t", index=False)
                 logger.info(f"Saved logits TSV to {save_logits}")
 
@@ -555,9 +618,9 @@ class ZeroShotEval:
         fpr, tpr, _ = roc_curve(y_true, scores)
         roc_auc = float(auc(fpr, tpr))
         auprc = float(average_precision_score(y_true, scores))
-        print(f"AUROC\t{roc_auc:.6f}")
-        print(f"AUPRC\t{auprc:.6f}")
-        if metrics_json:
+        accelerator.print(f"AUROC\t{roc_auc:.6f}")
+        accelerator.print(f"AUPRC\t{auprc:.6f}")
+        if metrics_json and accelerator.is_main_process:
             with open(metrics_json, "w") as f:
                 json.dump({"auroc": roc_auc, "auprc": auprc}, f, indent=2)
 
